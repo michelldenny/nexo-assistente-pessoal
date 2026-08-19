@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import AgendaView from "./AgendaView";
 
 type Entry = {
   id: number;
@@ -106,18 +107,18 @@ export default function Home() {
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark">n</span><span>nexo</span></div>
         <nav aria-label="Navegação principal">
-          {["Visão geral", "Financeiro", "Assistente"].map((item, index) => <button key={item} className={tab === item ? "nav-item active" : "nav-item"} onClick={() => setTab(item)}><span>{["⌂", "↗", "✦"][index]}</span>{item}</button>)}
+          {["Visão geral", "Financeiro", "Assistente", "Agenda"].map((item, index) => <button key={item} className={tab === item ? "nav-item active" : "nav-item"} onClick={() => setTab(item)}><span>{["⌂", "↗", "✦", "□"][index]}</span>{item}</button>)}
           <p className="nav-label">EM BREVE</p>
-          {["Agenda", "Documentos"].map(item => <button key={item} className="nav-item muted" disabled><span>○</span>{item}</button>)}
+          <button className="nav-item muted" disabled><span>○</span>Documentos</button>
         </nav>
         <div className="profile"><div className="avatar">MR</div><div><strong>Minha conta</strong><small>Espaço privado</small></div><button aria-label="Mais opções">•••</button></div>
       </aside>
 
       <section className="workspace">
-        <header className="topbar"><div><p className="eyebrow">SEU PAINEL PESSOAL</p><h1>{tab === "Visão geral" ? "Bom dia, Michell." : tab}</h1></div><button className="primary" onClick={() => openNew()}><span>＋</span>Novo lançamento</button></header>
+        {tab !== "Agenda" && <header className="topbar"><div><p className="eyebrow">SEU PAINEL PESSOAL</p><h1>{tab === "Visão geral" ? "Bom dia, Michell." : tab}</h1></div><button className="primary" onClick={() => openNew()}><span>＋</span>Novo lançamento</button></header>}
         {notice && <div className="notice" role="status">{notice}<button onClick={() => setNotice("")} aria-label="Fechar aviso">×</button></div>}
 
-        <div className="content-grid">
+        {tab === "Agenda" ? <AgendaView onNotice={setNotice} /> : <div className="content-grid">
           <section className="main-column">
             <article className="balance-card">
               <div className="balance-head"><div><p>Saldo atual</p><h2>{money(totals.income - totals.expense)}</h2></div><span className="status-pill">● Dados salvos</span></div>
@@ -140,7 +141,7 @@ export default function Home() {
             <div className="conversation"><p className="assistant-label">NEXO · AGORA</p><div className="bubble">{reply}</div><div className="suggestions"><button onClick={() => void sendMessage("Quanto gastei este mês?")}>Quanto gastei este mês?</button><button onClick={() => setMessage("Gastei 89,90 no mercado")}>Registrar uma despesa</button><button onClick={() => setMessage("Recebi 2500 de um projeto")}>Registrar uma receita</button></div></div>
             <div className="composer"><textarea aria-label="Mensagem para o assistente" placeholder="Fale com o Nexo..." value={message} onChange={e => setMessage(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendMessage(); }}}/><div><button aria-label="Anexar arquivo">＋</button><span>Enter para enviar</span><button className="send" onClick={() => void sendMessage()} aria-label="Enviar mensagem">↑</button></div></div>
           </aside>
-        </div>
+        </div>}
       </section>
 
       {modalOpen && <div className="modal-backdrop" role="presentation" onMouseDown={() => setModalOpen(false)}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" onMouseDown={e => e.stopPropagation()}><button className="modal-close" onClick={() => setModalOpen(false)}>×</button><p className="eyebrow">{editingId ? "EDITAR LANÇAMENTO" : "NOVO LANÇAMENTO"}</p><h2 id="modal-title">{editingId ? "Ajuste os dados" : "Registre do seu jeito"}</h2><div className="type-toggle"><button className={draft.kind === "expense" ? "selected" : ""} onClick={() => setDraft(d => ({...d, kind:"expense"}))}>Despesa</button><button className={draft.kind === "income" ? "selected" : ""} onClick={() => setDraft(d => ({...d, kind:"income"}))}>Receita</button></div><label>Descrição<input autoFocus value={draft.description} onChange={e => setDraft(d => ({...d, description:e.target.value}))} placeholder="Ex.: Mercado"/></label><div className="field-row"><label>Valor<input inputMode="decimal" value={draft.amount} onChange={e => setDraft(d => ({...d, amount:e.target.value}))} placeholder="0,00"/></label><label>Data<input type="date" value={draft.occurredOn} onChange={e => setDraft(d => ({...d, occurredOn:e.target.value}))}/></label></div><label>Categoria<select value={draft.category} onChange={e => setDraft(d => ({...d, category:e.target.value}))}>{["Alimentação","Trabalho","Assinaturas","Transporte","Moradia","Saúde","Outros"].map(c=><option key={c}>{c}</option>)}</select></label><button className="primary wide" disabled={saving} onClick={() => void saveDraft(editingId ? "manual" : reply.includes("Revise e confirme") ? "assistant" : "manual")}>{saving ? "Salvando…" : editingId ? "Salvar alterações" : "Salvar lançamento"}</button></div></div>}
