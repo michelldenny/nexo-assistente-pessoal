@@ -1,0 +1,28 @@
+body,button,input,select,textarea{
+  font-family:"Manrope Variable","Manrope","Segoe UI",sans-serif;
+}
+
+h1,h2,h3,
+.brand-mark,
+.balance-head h2,
+.section-title h3,
+.bubble,
+.empty-state strong,
+.agenda-toolbar h2,
+.upcoming-head strong,
+.agenda-empty strong,
+.modal h2{
+  font-family:"Fraunces Variable","Fraunces",serif;
+}
+
+h1,.agenda-toolbar h2,.modal h2{
+  letter-spacing:-.035em;
+}
+
+.transaction-copy strong,
+.assistant-head strong,
+.credit-card strong,
+.invoice-list b,
+.debt-stats strong{
+  letter-spacing:-.015em;
+}

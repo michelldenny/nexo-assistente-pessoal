@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import "@fontsource-variable/manrope";
+import "@fontsource-variable/fraunces";
 import "./globals.css";
 import "./mvp.css";
 import "./cards.css";
+import "./fonts.css";
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
