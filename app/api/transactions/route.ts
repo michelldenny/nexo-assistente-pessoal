@@ -1,65 +1,8 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
-import { getDb } from "../../../db";
-import { transactions } from "../../../db/schema";
-
-type Payload = { kind?: "expense" | "income"; description?: string; category?: string; amountCents?: number; occurredOn?: string; source?: "manual" | "assistant" };
-const validDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T12:00:00Z`));
-
-function validate(payload: Payload) {
-  const description = payload.description?.trim() ?? "";
-  const category = payload.category?.trim() || "Outros";
-  const amountCents = Math.round(Number(payload.amountCents));
-  const occurredOn = payload.occurredOn ?? "";
-  if (payload.kind !== "expense" && payload.kind !== "income") return { error: "Tipo inválido." } as const;
-  if (!description || description.length > 120) return { error: "Informe uma descrição de até 120 caracteres." } as const;
-  if (!Number.isSafeInteger(amountCents) || amountCents <= 0) return { error: "Informe um valor válido." } as const;
-  if (!validDate(occurredOn)) return { error: "Informe uma data válida." } as const;
-  return { data: { kind: payload.kind, description, category: category.slice(0, 60), amountCents, occurredOn, source: payload.source === "assistant" ? "assistant" as const : "manual" as const } } as const;
-}
-
-export async function GET() {
-  try {
-    const rows = await getDb().select().from(transactions).where(isNull(transactions.deletedAt)).orderBy(desc(transactions.occurredOn), desc(transactions.id)).limit(200);
-    return Response.json({ transactions: rows });
-  } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Não foi possível carregar os lançamentos." }, { status: 500 });
-  }
-}
-
-export async function POST(request: Request) {
-  try {
-    const checked = validate(await request.json() as Payload);
-    if ("error" in checked) return Response.json({ error: checked.error }, { status: 400 });
-    const [row] = await getDb().insert(transactions).values(checked.data).returning();
-    return Response.json({ transaction: row }, { status: 201 });
-  } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Não foi possível criar o lançamento." }, { status: 500 });
-  }
-}
-
-export async function PATCH(request: Request) {
-  try {
-    const payload = await request.json() as Payload & { id?: number };
-    const id = Math.round(Number(payload.id));
-    const checked = validate(payload);
-    if (!Number.isSafeInteger(id) || id <= 0) return Response.json({ error: "Lançamento inválido." }, { status: 400 });
-    if ("error" in checked) return Response.json({ error: checked.error }, { status: 400 });
-    const [row] = await getDb().update(transactions).set({ ...checked.data, updatedAt: new Date().toISOString() }).where(and(eq(transactions.id, id), isNull(transactions.deletedAt))).returning();
-    if (!row) return Response.json({ error: "Lançamento não encontrado." }, { status: 404 });
-    return Response.json({ transaction: row });
-  } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Não foi possível editar o lançamento." }, { status: 500 });
-  }
-}
-
-export async function DELETE(request: Request) {
-  try {
-    const id = Math.round(Number(new URL(request.url).searchParams.get("id")));
-    if (!Number.isSafeInteger(id) || id <= 0) return Response.json({ error: "Lançamento inválido." }, { status: 400 });
-    const [row] = await getDb().update(transactions).set({ deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }).where(and(eq(transactions.id, id), isNull(transactions.deletedAt))).returning({ id: transactions.id });
-    if (!row) return Response.json({ error: "Lançamento não encontrado." }, { status: 404 });
-    return Response.json({ deleted: true, id: row.id });
-  } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Não foi possível excluir o lançamento." }, { status: 500 });
-  }
-}
+import { camel, getSupabase } from "../../../db/supabase";
+type Payload={kind?:"expense"|"income";description?:string;category?:string;amountCents?:number;occurredOn?:string;source?:"manual"|"assistant"};
+const validDate=(v:string)=>/^\d{4}-\d{2}-\d{2}$/.test(v);
+function validate(p:Payload){const description=p.description?.trim()??"",amount=Math.round(Number(p.amountCents)),date=p.occurredOn??"";if(!["expense","income"].includes(p.kind??""))return{error:"Tipo inválido."};if(!description||description.length>120)return{error:"Informe uma descrição de até 120 caracteres."};if(!Number.isSafeInteger(amount)||amount<=0)return{error:"Informe um valor válido."};if(!validDate(date))return{error:"Informe uma data válida."};return{data:{kind:p.kind,description,category:(p.category?.trim()||"Outros").slice(0,60),amount_cents:amount,occurred_on:date,source:p.source==="assistant"?"assistant":"manual"}}}
+export async function GET(){try{const{data,error}=await getSupabase().from("transactions").select("*").is("deleted_at",null).order("occurred_on",{ascending:false}).order("id",{ascending:false}).limit(200);if(error)throw error;return Response.json({transactions:(data??[]).map(r=>camel(r))})}catch(e){return Response.json({error:e instanceof Error?e.message:"Não foi possível carregar os lançamentos."},{status:500})}}
+export async function POST(req:Request){try{const c=validate(await req.json());if("error"in c)return Response.json({error:c.error},{status:400});const{data,error}=await getSupabase().from("transactions").insert(c.data).select().single();if(error)throw error;return Response.json({transaction:camel(data)},{status:201})}catch(e){return Response.json({error:e instanceof Error?e.message:"Não foi possível criar o lançamento."},{status:500})}}
+export async function PATCH(req:Request){try{const p=await req.json() as Payload&{id?:number},id=Math.round(Number(p.id)),c=validate(p);if(!Number.isSafeInteger(id)||id<=0)return Response.json({error:"Lançamento inválido."},{status:400});if("error"in c)return Response.json({error:c.error},{status:400});const{data,error}=await getSupabase().from("transactions").update({...c.data,updated_at:new Date().toISOString()}).eq("id",id).is("deleted_at",null).select().single();if(error)throw error;return Response.json({transaction:camel(data)})}catch(e){return Response.json({error:e instanceof Error?e.message:"Não foi possível editar."},{status:500})}}
+export async function DELETE(req:Request){try{const id=Math.round(Number(new URL(req.url).searchParams.get("id")));const{error}=await getSupabase().from("transactions").update({deleted_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq("id",id).is("deleted_at",null);if(error)throw error;return Response.json({deleted:true,id})}catch(e){return Response.json({error:e instanceof Error?e.message:"Não foi possível excluir."},{status:500})}}

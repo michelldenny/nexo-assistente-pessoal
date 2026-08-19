@@ -1,7 +1,5 @@
 import { env } from "cloudflare:workers";
-import { isNull } from "drizzle-orm";
-import { getDb } from "../../../db";
-import { calendarEvents, transactions } from "../../../db/schema";
+import { camel, getSupabase } from "../../../db/supabase";
 import { TRANSACTION_CATEGORIES } from "../../categories";
 
 type Part = { text?: string; functionCall?: { name: string; args: Record<string, unknown> }; functionResponse?: { name: string; response: Record<string, unknown> } };
@@ -65,12 +63,14 @@ export async function POST(request: Request) {
 
     let result: Record<string, unknown>;
     if (call.name === "summarize_finances") {
-      const rows = await getDb().select({ kind: transactions.kind, amountCents: transactions.amountCents }).from(transactions).where(isNull(transactions.deletedAt));
-      const sums = rows.reduce((acc, row) => { acc[row.kind] += row.amountCents; return acc; }, { expense: 0, income: 0 });
+      const { data, error } = await getSupabase().from("transactions").select("kind,amount_cents").is("deleted_at", null);
+      if (error) throw error;
+      const sums = (data ?? []).reduce((acc, row) => { acc[row.kind as "expense" | "income"] += row.amount_cents; return acc; }, { expense: 0, income: 0 });
       result = { income_cents: sums.income, expense_cents: sums.expense, balance_cents: sums.income - sums.expense, currency: "BRL" };
     } else {
-      const rows = await getDb().select().from(calendarEvents).where(isNull(calendarEvents.deletedAt));
-      result = { today: today(), events: rows.filter(e => e.eventDate >= today() && e.status === "scheduled").sort((a, b) => `${a.eventDate}${a.startTime ?? ""}`.localeCompare(`${b.eventDate}${b.startTime ?? ""}`)).slice(0, 20) };
+      const { data, error } = await getSupabase().from("calendar_events").select("*").is("deleted_at", null).gte("event_date", today()).eq("status", "scheduled").order("event_date").order("start_time").limit(20);
+      if (error) throw error;
+      result = { today: today(), events: (data ?? []).map(row => camel(row)) };
     }
     const final = await callGemini([user, { role: "model", parts: model?.parts ?? [] }, { role: "user", parts: [{ functionResponse: { name: call.name, response: result } }] }]);
     return Response.json({ type: "message", message: textOf(final) });

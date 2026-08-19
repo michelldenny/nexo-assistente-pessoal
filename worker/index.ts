@@ -7,6 +7,8 @@ interface Env {
   DB: D1Database;
   GEMINI_API_KEY: string;
   GEMINI_MODEL?: string;
+  SUPABASE_URL: string;
+  SUPABASE_SECRET_KEY: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
