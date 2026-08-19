@@ -84,22 +84,20 @@ export default function Home() {
   async function sendMessage(text = message) {
     const cleaned = text.trim();
     if (!cleaned) return;
-    const found = cleaned.match(/(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)/i);
-    if (/gast|paguei|comprei|recebi|ganhei/i.test(cleaned) && found) {
-      const amount = found[1];
-      const kind = /recebi|ganhei/i.test(cleaned) ? "income" : "expense";
-      const description = /mercado/i.test(cleaned) ? "Mercado" : /ifood|delivery/i.test(cleaned) ? "Delivery" : kind === "income" ? "Recebimento" : "Novo lançamento";
-      const category = description === "Mercado" || description === "Delivery" ? "Alimentação" : kind === "income" ? "Trabalho" : "Outros";
-      setDraft({ kind, description, category, amount, occurredOn: today() });
-      setMessage("");
-      setReply(`Entendi: ${kind === "expense" ? "despesa" : "receita"} de ${money(Math.round(Number(amount.replace(",", ".")) * 100))} em ${description}. Revise e confirme.`);
-      setEditingId(null); setModalOpen(true);
-    } else if (/quanto|resumo|gastei/i.test(cleaned)) {
-      setReply(`Neste mês, suas despesas somam ${money(totals.expense)} e suas receitas ${money(totals.income)}. Seu saldo é ${money(totals.income - totals.expense)}.`);
-      setMessage("");
-    } else {
-      setReply("No momento posso registrar receitas e despesas ou responder perguntas sobre seus totais. A interpretação avançada por IA entra na próxima etapa.");
-      setMessage("");
+    setMessage("");
+    setReply("Pensando…");
+    try {
+      const response = await fetch("/api/assistant", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: cleaned }) });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error);
+      setReply(body.message);
+      if (body.type === "transaction_draft") {
+        setDraft(body.draft);
+        setEditingId(null);
+        setModalOpen(true);
+      }
+    } catch (error) {
+      setReply(error instanceof Error ? `Não consegui responder: ${error.message}` : "Não consegui responder agora.");
     }
   }
 
