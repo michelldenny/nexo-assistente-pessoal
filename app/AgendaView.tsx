@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 
 type EventItem = { id: number; title: string; eventDate: string; startTime: string | null; endTime: string | null; location: string | null; notes: string | null; color: string; status: "scheduled" | "completed" };
-type EventDraft = { title: string; eventDate: string; startTime: string; endTime: string; location: string; notes: string; color: string; status: "scheduled" | "completed" };
+export type EventDraft = { title: string; eventDate: string; startTime: string; endTime: string; location: string; notes: string; color: string; status: "scheduled" | "completed" };
 const localDate = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
 const newDraft = (date = localDate()): EventDraft => ({ title: "", eventDate: date, startTime: "09:00", endTime: "", location: "", notes: "", color: "green", status: "scheduled" });
 const monthLabel = (date: Date) => new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" }).format(date);
 const longDate = (value: string) => new Intl.DateTimeFormat("pt-BR", { weekday: "short", day: "2-digit", month: "short", timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`));
 
-export default function AgendaView({ onNotice }: { onNotice: (message: string) => void }) {
+export default function AgendaView({ onNotice, pendingDraft, onDraftOpened }: { onNotice: (message: string) => void; pendingDraft?: EventDraft | null; onDraftOpened?: () => void }) {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [month, setMonth] = useState(() => { const now = new Date(); return new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1)); });
   const [modalOpen, setModalOpen] = useState(false);
@@ -19,6 +19,10 @@ export default function AgendaView({ onNotice }: { onNotice: (message: string) =
   const [saving, setSaving] = useState(false);
 
   useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    if (!pendingDraft) return;
+    setEditingId(null); setDraft(pendingDraft); setModalOpen(true); onDraftOpened?.();
+  }, [pendingDraft, onDraftOpened]);
   async function load() {
     try { const response = await fetch("/api/events", { cache: "no-store" }); const body = await response.json(); if (!response.ok) throw new Error(body.error); setEvents(body.events); }
     catch { onNotice("Não foi possível carregar a agenda agora."); }

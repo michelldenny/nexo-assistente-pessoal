@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import AgendaView from "./AgendaView";
+import AgendaView, { type EventDraft } from "./AgendaView";
 
 type Entry = {
   id: number;
@@ -31,6 +31,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
+  const [agendaDraft, setAgendaDraft] = useState<EventDraft | null>(null);
 
   useEffect(() => { void loadEntries(); }, []);
   async function loadEntries() {
@@ -97,6 +98,10 @@ export default function Home() {
         setEditingId(null);
         setModalOpen(true);
       }
+      if (body.type === "event_draft") {
+        setAgendaDraft(body.draft);
+        setTab("Agenda");
+      }
     } catch (error) {
       setReply(error instanceof Error ? `Não consegui responder: ${error.message}` : "Não consegui responder agora.");
     }
@@ -118,7 +123,7 @@ export default function Home() {
         {tab !== "Agenda" && <header className="topbar"><div><p className="eyebrow">SEU PAINEL PESSOAL</p><h1>{tab === "Visão geral" ? "Bom dia, Michell." : tab}</h1></div><button className="primary" onClick={() => openNew()}><span>＋</span>Novo lançamento</button></header>}
         {notice && <div className="notice" role="status">{notice}<button onClick={() => setNotice("")} aria-label="Fechar aviso">×</button></div>}
 
-        {tab === "Agenda" ? <AgendaView onNotice={setNotice} /> : <div className="content-grid">
+        {tab === "Agenda" ? <AgendaView onNotice={setNotice} pendingDraft={agendaDraft} onDraftOpened={() => setAgendaDraft(null)} /> : <div className="content-grid">
           <section className="main-column">
             <article className="balance-card">
               <div className="balance-head"><div><p>Saldo atual</p><h2>{money(totals.income - totals.expense)}</h2></div><span className="status-pill">● Dados salvos</span></div>
@@ -138,7 +143,7 @@ export default function Home() {
 
           <aside className="assistant-card">
             <div className="assistant-head"><div className="assistant-orb">✦</div><div><strong>Assistente Nexo</strong><small><span>●</span> Pronto para ajudar</small></div><button aria-label="Menu do assistente">•••</button></div>
-            <div className="conversation"><p className="assistant-label">NEXO · AGORA</p><div className="bubble">{reply}</div><div className="suggestions"><button onClick={() => void sendMessage("Quanto gastei este mês?")}>Quanto gastei este mês?</button><button onClick={() => setMessage("Gastei 89,90 no mercado")}>Registrar uma despesa</button><button onClick={() => setMessage("Recebi 2500 de um projeto")}>Registrar uma receita</button></div></div>
+            <div className="conversation"><p className="assistant-label">NEXO · AGORA</p><div className="bubble">{reply}</div><div className="suggestions"><button onClick={() => void sendMessage("O que tenho na agenda?")}>Consultar minha agenda</button><button onClick={() => setMessage("Marque dentista sexta às 14h")}>Criar compromisso</button><button onClick={() => setMessage("Gastei 89,90 no mercado")}>Registrar despesa</button></div></div>
             <div className="composer"><textarea aria-label="Mensagem para o assistente" placeholder="Fale com o Nexo..." value={message} onChange={e => setMessage(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendMessage(); }}}/><div><button aria-label="Anexar arquivo">＋</button><span>Enter para enviar</span><button className="send" onClick={() => void sendMessage()} aria-label="Enviar mensagem">↑</button></div></div>
           </aside>
         </div>}
