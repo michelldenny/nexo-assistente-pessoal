@@ -14,7 +14,7 @@ Assistente pessoal de finanças e organização, pensado para um único usuário
 
 - Next.js + TypeScript + Tailwind na interface.
 - PostgreSQL/Supabase como banco de produção; o schema está em `db/schema.sql`.
-- OpenAI Responses API no servidor, usando funções com argumentos estritos.
+- Gemini API no servidor, usando chamadas de função com argumentos validados.
 - Operações de escrita sempre passam por validação de domínio e retornam um recibo auditável.
 - Valores monetários são armazenados em centavos, nunca em ponto flutuante.
 
@@ -26,4 +26,4 @@ Veja `docs/ARCHITECTURE.md` para o desenho completo e `docs/AI-FLOW.md` para o f
 2. Inicie com `npm run dev`.
 3. Abra `http://localhost:3000`.
 
-A interface atual usa dados demonstrativos. A conexão com Supabase e OpenAI entra na próxima fatia, preservando os contratos definidos nos documentos.
+A aplicação usa o Gemini como único provedor de IA. As integrações futuras devem preservar os contratos definidos nos documentos e usar o mesmo provedor.

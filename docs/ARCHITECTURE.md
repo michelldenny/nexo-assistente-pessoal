@@ -12,7 +12,7 @@ Finanças IA  Agenda/Docs
  PostgreSQL + Storage
 ```
 
-O navegador nunca acessa a OpenAI diretamente. Route handlers do Next.js autenticam a sessão, validam a entrada e chamam serviços de domínio. O Assistente IA não escreve SQL: ele escolhe uma função permitida; o servidor valida os argumentos, executa a transação e devolve o resultado ao modelo.
+O navegador nunca acessa o Gemini diretamente. Route handlers do Next.js autenticam a sessão, validam a entrada e chamam serviços de domínio. O Assistente IA não escreve SQL: ele escolhe uma função permitida; o servidor valida os argumentos, executa a transação e devolve o resultado ao modelo.
 
 ## Módulos e fronteiras
 
