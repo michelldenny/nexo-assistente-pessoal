@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import AgendaView, { type EventDraft } from "./AgendaView";
 import { CATEGORY_COLORS, TRANSACTION_CATEGORIES } from "./categories";
+import CardsView from "./CardsView";
 
 type Entry = {
   id: number;
@@ -112,7 +113,7 @@ export default function Home() {
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark">n</span><span>nexo</span></div>
         <nav aria-label="Navegação principal">
-          {["Visão geral", "Financeiro", "Assistente", "Agenda"].map((item, index) => <button key={item} className={tab === item ? "nav-item active" : "nav-item"} onClick={() => setTab(item)}><span>{["⌂", "↗", "✦", "□"][index]}</span>{item}</button>)}
+          {["Visão geral", "Financeiro", "Assistente", "Agenda", "Cartões", "Dívidas"].map((item, index) => <button key={item} className={tab === item ? "nav-item active" : "nav-item"} onClick={() => setTab(item)}><span>{["⌂", "↗", "✦", "□", "▣", "◔"][index]}</span>{item}</button>)}
           <p className="nav-label">EM BREVE</p>
           <button className="nav-item muted" disabled><span>○</span>Documentos</button>
         </nav>
@@ -120,10 +121,10 @@ export default function Home() {
       </aside>
 
       <section className="workspace">
-        {tab !== "Agenda" && <header className="topbar"><div><p className="eyebrow">SEU PAINEL PESSOAL</p><h1>{tab === "Visão geral" ? "Bom dia, Michell." : tab}</h1></div><button className="primary" onClick={() => openNew()}><span>＋</span>Novo lançamento</button></header>}
+        {!["Agenda","Cartões","Dívidas"].includes(tab) && <header className="topbar"><div><p className="eyebrow">SEU PAINEL PESSOAL</p><h1>{tab === "Visão geral" ? "Bom dia, Michell." : tab}</h1></div><button className="primary" onClick={() => openNew()}><span>＋</span>Novo lançamento</button></header>}
         {notice && <div className="notice" role="status">{notice}<button onClick={() => setNotice("")} aria-label="Fechar aviso">×</button></div>}
 
-        {tab === "Agenda" ? <AgendaView onNotice={setNotice} pendingDraft={agendaDraft} onDraftOpened={() => setAgendaDraft(null)} /> : <div className="content-grid">
+        {tab === "Agenda" ? <AgendaView onNotice={setNotice} pendingDraft={agendaDraft} onDraftOpened={() => setAgendaDraft(null)} /> : tab === "Cartões" || tab === "Dívidas" ? <CardsView mode={tab === "Cartões" ? "cards" : "debts"} onNotice={setNotice} /> : <div className="content-grid">
           <section className="main-column">
             <article className="balance-card">
               <div className="balance-head"><div><p>Saldo atual</p><h2>{money(totals.income - totals.expense)}</h2></div><span className="status-pill">● Dados salvos</span></div>
