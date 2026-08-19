@@ -6,6 +6,7 @@ import "./globals.css";
 import "./mvp.css";
 import "./cards.css";
 import "./fonts.css";
+import "./monthly.css";
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
