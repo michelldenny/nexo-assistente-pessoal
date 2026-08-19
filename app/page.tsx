@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import AgendaView, { type EventDraft } from "./AgendaView";
+import { CATEGORY_COLORS, TRANSACTION_CATEGORIES } from "./categories";
 
 type Entry = {
   id: number;
@@ -16,7 +17,6 @@ type Entry = {
 type Draft = { kind: "expense" | "income"; description: string; category: string; amount: string; occurredOn: string };
 const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
 const emptyDraft = (): Draft => ({ kind: "expense", description: "", category: "Outros", amount: "", occurredOn: today() });
-const colors: Record<string, string> = { Alimentação: "#ef7b45", Trabalho: "#1f9d7a", Assinaturas: "#7559d9", Transporte: "#e6ae37", Moradia: "#4e83c4", Saúde: "#d35873", Outros: "#758079" };
 const money = (cents: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Math.abs(cents) / 100);
 const displayDate = (date: string) => new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`));
 
@@ -133,7 +133,7 @@ export default function Home() {
             <div className="section-title"><div><p className="eyebrow">MOVIMENTAÇÃO</p><h3>{tab === "Financeiro" ? "Todos os lançamentos" : "Últimos lançamentos"}</h3></div><button onClick={() => setTab(tab === "Financeiro" ? "Visão geral" : "Financeiro")}>{tab === "Financeiro" ? "Ver resumo" : "Ver todos"} →</button></div>
             <div className="transactions">
               {loading ? <div className="empty-state">Carregando seus lançamentos…</div> : entries.length === 0 ? <div className="empty-state"><strong>Seu financeiro começa aqui.</strong><span>Registre a primeira receita ou despesa pelo botão acima ou pelo assistente.</span><button onClick={() => openNew()}>Criar primeiro lançamento</button></div> : entries.slice(0, tab === "Financeiro" ? 200 : 5).map(entry => <div className="transaction" key={entry.id}>
-                <div className="transaction-icon" style={{background: `${colors[entry.category] ?? colors.Outros}18`, color: colors[entry.category] ?? colors.Outros}}>{entry.description.charAt(0).toUpperCase()}</div>
+                <div className="transaction-icon" style={{background: `${CATEGORY_COLORS[entry.category] ?? CATEGORY_COLORS.Outros}18`, color: CATEGORY_COLORS[entry.category] ?? CATEGORY_COLORS.Outros}}>{entry.description.charAt(0).toUpperCase()}</div>
                 <div className="transaction-copy"><strong>{entry.description}</strong><small>{entry.category} · {displayDate(entry.occurredOn)}{entry.source === "assistant" ? " · via assistente" : ""}</small></div>
                 <strong className={entry.kind}>{entry.kind === "income" ? "+ " : "− "}{money(entry.amountCents)}</strong>
                 <div className="row-actions"><button onClick={() => openEdit(entry)} aria-label={`Editar ${entry.description}`}>Editar</button><button className="danger" onClick={() => void removeEntry(entry)} aria-label={`Excluir ${entry.description}`}>Excluir</button></div>
@@ -149,7 +149,7 @@ export default function Home() {
         </div>}
       </section>
 
-      {modalOpen && <div className="modal-backdrop" role="presentation" onMouseDown={() => setModalOpen(false)}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" onMouseDown={e => e.stopPropagation()}><button className="modal-close" onClick={() => setModalOpen(false)}>×</button><p className="eyebrow">{editingId ? "EDITAR LANÇAMENTO" : "NOVO LANÇAMENTO"}</p><h2 id="modal-title">{editingId ? "Ajuste os dados" : "Registre do seu jeito"}</h2><div className="type-toggle"><button className={draft.kind === "expense" ? "selected" : ""} onClick={() => setDraft(d => ({...d, kind:"expense"}))}>Despesa</button><button className={draft.kind === "income" ? "selected" : ""} onClick={() => setDraft(d => ({...d, kind:"income"}))}>Receita</button></div><label>Descrição<input autoFocus value={draft.description} onChange={e => setDraft(d => ({...d, description:e.target.value}))} placeholder="Ex.: Mercado"/></label><div className="field-row"><label>Valor<input inputMode="decimal" value={draft.amount} onChange={e => setDraft(d => ({...d, amount:e.target.value}))} placeholder="0,00"/></label><label>Data<input type="date" value={draft.occurredOn} onChange={e => setDraft(d => ({...d, occurredOn:e.target.value}))}/></label></div><label>Categoria<select value={draft.category} onChange={e => setDraft(d => ({...d, category:e.target.value}))}>{["Alimentação","Trabalho","Assinaturas","Transporte","Moradia","Saúde","Outros"].map(c=><option key={c}>{c}</option>)}</select></label><button className="primary wide" disabled={saving} onClick={() => void saveDraft(editingId ? "manual" : reply.includes("Revise e confirme") ? "assistant" : "manual")}>{saving ? "Salvando…" : editingId ? "Salvar alterações" : "Salvar lançamento"}</button></div></div>}
+      {modalOpen && <div className="modal-backdrop" role="presentation" onMouseDown={() => setModalOpen(false)}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" onMouseDown={e => e.stopPropagation()}><button className="modal-close" onClick={() => setModalOpen(false)}>×</button><p className="eyebrow">{editingId ? "EDITAR LANÇAMENTO" : "NOVO LANÇAMENTO"}</p><h2 id="modal-title">{editingId ? "Ajuste os dados" : "Registre do seu jeito"}</h2><div className="type-toggle"><button className={draft.kind === "expense" ? "selected" : ""} onClick={() => setDraft(d => ({...d, kind:"expense"}))}>Despesa</button><button className={draft.kind === "income" ? "selected" : ""} onClick={() => setDraft(d => ({...d, kind:"income"}))}>Receita</button></div><label>Descrição<input autoFocus value={draft.description} onChange={e => setDraft(d => ({...d, description:e.target.value}))} placeholder="Ex.: Mercado"/></label><div className="field-row"><label>Valor<input inputMode="decimal" value={draft.amount} onChange={e => setDraft(d => ({...d, amount:e.target.value}))} placeholder="0,00"/></label><label>Data<input type="date" value={draft.occurredOn} onChange={e => setDraft(d => ({...d, occurredOn:e.target.value}))}/></label></div><label>Categoria<select value={draft.category} onChange={e => setDraft(d => ({...d, category:e.target.value}))}>{TRANSACTION_CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></label><button className="primary wide" disabled={saving} onClick={() => void saveDraft(editingId ? "manual" : reply.includes("Revise e confirme") ? "assistant" : "manual")}>{saving ? "Salvando…" : editingId ? "Salvar alterações" : "Salvar lançamento"}</button></div></div>}
     </main>
   );
 }
