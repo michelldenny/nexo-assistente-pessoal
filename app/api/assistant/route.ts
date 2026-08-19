@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { camel, getSupabase } from "../../../db/supabase";
-import { TRANSACTION_CATEGORIES } from "../../categories";
+import { INCOME_CATEGORIES, TRANSACTION_CATEGORIES } from "../../categories";
 
 type Part = { text?: string; functionCall?: { name: string; args: Record<string, unknown> }; functionResponse?: { name: string; response: Record<string, unknown> } };
 type Content = { role?: string; parts?: Part[] };
@@ -9,7 +9,7 @@ type GeminiResponse = { candidates?: Array<{ content?: Content }>; error?: { mes
 const functionDeclarations = [
   { name: "prepare_transaction", description: "Prepare uma receita ou despesa para revisão antes de salvar.", parameters: { type: "OBJECT", properties: {
     kind: { type: "STRING", enum: ["expense", "income"] }, description: { type: "STRING" },
-    category: { type: "STRING", enum: TRANSACTION_CATEGORIES },
+    category: { type: "STRING", enum: [...TRANSACTION_CATEGORIES, ...INCOME_CATEGORIES], description: "Para expense use somente categorias de despesa. Para income use somente categorias de receita." },
     amount_cents: { type: "INTEGER", minimum: 1 }, occurred_on: { type: "STRING", description: "Data YYYY-MM-DD." },
   }, required: ["kind", "description", "category", "amount_cents", "occurred_on"] } },
   { name: "summarize_finances", description: "Consulte receitas, despesas e saldo salvos.", parameters: { type: "OBJECT", properties: {} } },

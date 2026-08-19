@@ -21,6 +21,18 @@ export const TRANSACTION_CATEGORIES = [
   "Outros",
 ] as const;
 
+export const INCOME_CATEGORIES = [
+  "13º",
+  "Bonificação",
+  "Empréstimo",
+  "ISK",
+  "Periculosidade",
+  "Salário",
+  "Saldo Anterior",
+  "Vale Alimentação",
+  "Vale Refeição",
+] as const;
+
 export const CATEGORY_COLORS: Record<string, string> = {
   Alimentação: "#ef7b45",
   "Apê": "#4e83c4",
@@ -42,4 +54,13 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Transporte: "#e34f5f",
   Viagem: "#4e83c4",
   Outros: "#758079",
+  "13º": "#218b6b",
+  Bonificação: "#65a348",
+  Empréstimo: "#5876bd",
+  ISK: "#8465b8",
+  Periculosidade: "#c47835",
+  Salário: "#168565",
+  "Saldo Anterior": "#607b72",
+  "Vale Alimentação": "#d58b38",
+  "Vale Refeição": "#d36e49",
 };
