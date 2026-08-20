@@ -206,7 +206,21 @@
   display: grid;
   gap: 7px;
   margin-top: 14px;
-  overflow: visible;
+  max-height: min(58vh, 520px);
+  padding-right: 5px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-color: #b9c9bf transparent;
+  scrollbar-width: thin;
+}
+.purchase-list::-webkit-scrollbar {
+  width: 6px;
+}
+.purchase-list::-webkit-scrollbar-thumb {
+  border-radius: 8px;
+  background: #b9c9bf;
 }
 .purchase-list article {
   display: grid;
@@ -292,35 +306,6 @@
 .purchase-delete:hover {
   background: #feece8;
   border-color: #e8c2bb;
-}
-.purchase-pagination {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 12px;
-  color: var(--muted);
-  font-size: 10px;
-}
-.purchase-pagination > div {
-  display: flex;
-  gap: 6px;
-}
-.purchase-pagination button {
-  width: 30px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
-  color: var(--green);
-  font-size: 18px;
-  cursor: pointer;
-}
-.purchase-pagination button:disabled {
-  opacity: 0.35;
-  cursor: default;
 }
 .purchase-value-mode {
   display: grid;

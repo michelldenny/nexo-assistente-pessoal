@@ -149,7 +149,6 @@ export default function CardsView({
     field: "date",
     direction: "desc",
   });
-  const [purchasePage, setPurchasePage] = useState(0);
   const [card, setCard] = useState(emptyCard),
     [purchase, setPurchase] = useState(emptyPurchase);
   const cardMap = useMemo(
@@ -221,17 +220,7 @@ export default function CardsView({
     selectedCard,
     selectedMonth,
   ]);
-  const purchasesPerPage = 5,
-    purchasePageCount = Math.max(
-      1,
-      Math.ceil(selectedCardPurchases.length / purchasesPerPage),
-    ),
-    safePurchasePage = Math.min(purchasePage, purchasePageCount - 1),
-    visibleCardPurchases = selectedCardPurchases.slice(
-      safePurchasePage * purchasesPerPage,
-      (safePurchasePage + 1) * purchasesPerPage,
-    ),
-    activeMonth = selectedMonth || today().slice(0, 7);
+  const activeMonth = selectedMonth || today().slice(0, 7);
   async function load() {
     try {
       const r = await fetch("/api/cards", { cache: "no-store" }),
@@ -254,7 +243,6 @@ export default function CardsView({
   }
   function openCardPurchases(item: Card) {
     setPurchaseSort({ field: "date", direction: "desc" });
-    setPurchasePage(0);
     setSelectedCard(item);
   }
   function togglePurchaseSort(field: PurchaseSort["field"]) {
@@ -265,7 +253,6 @@ export default function CardsView({
           ? "asc"
           : "desc",
     }));
-    setPurchasePage(0);
   }
   function openEditCard(item: Card) {
     setEditingCardId(item.id);
@@ -954,7 +941,7 @@ export default function CardsView({
               </div>
             </div>
             <div className="purchase-list">
-              {visibleCardPurchases.map((p) => {
+              {selectedCardPurchases.map((p) => {
                 return (
                   <article key={p.id} className="purchase-item">
                     <span
@@ -1004,34 +991,6 @@ export default function CardsView({
                 </div>
               )}
             </div>
-            {selectedCardPurchases.length > purchasesPerPage && (
-              <footer className="purchase-pagination">
-                <span>
-                  {safePurchasePage * purchasesPerPage + 1}–
-                  {Math.min(
-                    (safePurchasePage + 1) * purchasesPerPage,
-                    selectedCardPurchases.length,
-                  )}{" "}
-                  de {selectedCardPurchases.length}
-                </span>
-                <div>
-                  <button
-                    onClick={() => setPurchasePage(safePurchasePage - 1)}
-                    disabled={safePurchasePage === 0}
-                    aria-label="Página anterior"
-                  >
-                    ‹
-                  </button>
-                  <button
-                    onClick={() => setPurchasePage(safePurchasePage + 1)}
-                    disabled={safePurchasePage >= purchasePageCount - 1}
-                    aria-label="Próxima página"
-                  >
-                    ›
-                  </button>
-                </div>
-              </footer>
-            )}
           </div>
         </div>
       )}
