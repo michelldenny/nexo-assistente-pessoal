@@ -68,6 +68,7 @@ const emptyPurchase = {
   purchaseDate: today(),
   total: "0,00",
   installmentCount: "1",
+  valueMode: "total" as "total" | "installment",
 };
 export default function CardsView({
   mode,
@@ -171,7 +172,12 @@ export default function CardsView({
   async function createPurchase() {
     setSaving(true);
     try {
-      const totalCents = parseMoneyInput(purchase.total),
+      const enteredCents = parseMoneyInput(purchase.total),
+        installmentCount = Number(purchase.installmentCount),
+        totalCents =
+          purchase.valueMode === "installment"
+            ? enteredCents * installmentCount
+            : enteredCents,
         r = await fetch("/api/cards", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -180,7 +186,7 @@ export default function CardsView({
             ...purchase,
             cardId: Number(purchase.cardId),
             totalCents,
-            installmentCount: Number(purchase.installmentCount),
+            installmentCount,
           }),
         }),
         b = await r.json();
@@ -247,9 +253,37 @@ export default function CardsView({
               }
             />
           </label>
+          <div className="purchase-value-mode">
+            <span>O valor informado é</span>
+            <div>
+              <button
+                className={purchase.valueMode === "total" ? "selected" : ""}
+                onClick={() => setPurchase({ ...purchase, valueMode: "total" })}
+              >
+                Valor total
+              </button>
+              <button
+                className={
+                  purchase.valueMode === "installment" ? "selected" : ""
+                }
+                onClick={() =>
+                  setPurchase({ ...purchase, valueMode: "installment" })
+                }
+              >
+                Valor da parcela
+              </button>
+            </div>
+            <small>
+              {purchase.valueMode === "total"
+                ? "O sistema dividirá este valor pela quantidade de parcelas."
+                : "O total da compra será calculado multiplicando o valor pela quantidade de parcelas."}
+            </small>
+          </div>
           <div className="field-row">
             <label>
-              Valor total
+              {purchase.valueMode === "total"
+                ? "Valor total"
+                : "Valor da parcela"}
               <input
                 inputMode="decimal"
                 value={purchase.total}

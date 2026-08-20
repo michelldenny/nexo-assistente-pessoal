@@ -91,6 +91,11 @@ export default function Home() {
     void loadEntries();
     void loadInsights();
   }, [month]);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(""), 4500);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
   async function loadInsights() {
     const response = await fetch(`/api/insights?month=${month}`, {
       cache: "no-store",
@@ -181,13 +186,20 @@ export default function Home() {
     }
   }
 
-  async function removeEntry(entry: Entry) {
-    const response = await fetch(`/api/transactions?id=${entry.id}`, {
-      method: "DELETE",
-    });
+  async function removeEntry(entry: Entry, scope: "one" | "future" = "one") {
+    const response = await fetch(
+      `/api/transactions?id=${entry.id}&scope=${scope}`,
+      {
+        method: "DELETE",
+      },
+    );
     if (response.ok) {
       setEntries((current) => current.filter((e) => e.id !== entry.id));
-      setNotice("Lançamento excluído.");
+      setNotice(
+        scope === "future"
+          ? "Este lançamento e todas as recorrências futuras foram excluídos."
+          : "Lançamento excluído.",
+      );
       setEntryToDelete(null);
     } else setNotice("Não foi possível excluir.");
   }
@@ -397,7 +409,9 @@ export default function Home() {
             onNotice={setNotice}
           />
         ) : (
-          <div className="content-grid">
+          <div
+            className={`content-grid ${tab === "Assistente" ? "assistant-view" : "finance-view"}`}
+          >
             <section className="main-column">
               <article className="balance-card">
                 <div className="balance-head">
@@ -816,7 +830,7 @@ export default function Home() {
         </div>
       )}
       <ConfirmDialog
-        open={Boolean(entryToDelete)}
+        open={Boolean(entryToDelete && !entryToDelete.recurringRuleId)}
         title="Excluir lançamento?"
         message={
           entryToDelete
@@ -828,6 +842,39 @@ export default function Home() {
         onCancel={() => setEntryToDelete(null)}
         onConfirm={() => entryToDelete && void removeEntry(entryToDelete)}
       />
+      {entryToDelete?.recurringRuleId && (
+        <div
+          className="modal-backdrop system-dialog-backdrop"
+          role="presentation"
+          onMouseDown={() => setEntryToDelete(null)}
+        >
+          <div
+            className="system-dialog recurrence-delete-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="dialog-symbol danger">!</div>
+            <h2>Excluir lançamento recorrente?</h2>
+            <p>
+              Você pode remover somente “{entryToDelete.description}” deste mês
+              ou interromper também todas as ocorrências futuras.
+            </p>
+            <div className="recurrence-delete-actions">
+              <button onClick={() => setEntryToDelete(null)}>Cancelar</button>
+              <button onClick={() => void removeEntry(entryToDelete, "one")}>
+                Somente este mês
+              </button>
+              <button
+                className="dialog-danger"
+                onClick={() => void removeEntry(entryToDelete, "future")}
+              >
+                Este e os futuros
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

@@ -193,12 +193,42 @@ export async function PATCH(req: Request) {
 }
 export async function DELETE(req: Request) {
   try {
-    const id = Math.round(Number(new URL(req.url).searchParams.get("id")));
-    const { error } = await getSupabase()
+    const params = new URL(req.url).searchParams;
+    const id = Math.round(Number(params.get("id")));
+    const scope = params.get("scope");
+    const db = getSupabase();
+    const { data: transaction, error: findError } = await db
+      .from("transactions")
+      .select("id,recurring_rule_id,occurred_on")
+      .eq("id", id)
+      .is("deleted_at", null)
+      .single();
+    if (findError || !transaction)
+      return Response.json(
+        { error: "Lançamento não encontrado." },
+        { status: 404 },
+      );
+    const now = new Date().toISOString();
+    if (scope === "future" && transaction.recurring_rule_id) {
+      const future = await db
+        .from("transactions")
+        .update({ deleted_at: now, updated_at: now })
+        .eq("recurring_rule_id", transaction.recurring_rule_id)
+        .gte("occurred_on", transaction.occurred_on)
+        .is("deleted_at", null);
+      if (future.error) throw future.error;
+      const rule = await db
+        .from("recurring_rules")
+        .update({ active: false, updated_at: now })
+        .eq("id", transaction.recurring_rule_id);
+      if (rule.error) throw rule.error;
+      return Response.json({ deleted: true, id, scope: "future" });
+    }
+    const { error } = await db
       .from("transactions")
       .update({
-        deleted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        deleted_at: now,
+        updated_at: now,
       })
       .eq("id", id)
       .is("deleted_at", null);
