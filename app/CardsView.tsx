@@ -757,16 +757,10 @@ export default function CardsView({
                     </div>
                   </span>
                 </div>
-                <div className="card-cycle">
-                  <span>
-                    Fechamento<strong>Dia {c.closingDay}</strong>
-                  </span>
-                  <span>
-                    Vencimento<strong>Dia {c.dueDay}</strong>
-                  </span>
-                </div>
                 <div className="invoice-highlight">
-                  <small>Fatura {formatMonth(activeMonth)}</small>
+                  <small>
+                    Fechamento dia {c.closingDay} · Vencimento dia {c.dueDay}
+                  </small>
                   <strong>{money(current?.totalCents ?? 0)}</strong>
                 </div>
                 <div className="limit-progress">
@@ -783,7 +777,6 @@ export default function CardsView({
                     Limite total<strong>{money(c.creditLimitCents)}</strong>
                   </span>
                 </div>
-                <small className="card-hint">Clique para ver as compras</small>
               </article>
             );
           })}

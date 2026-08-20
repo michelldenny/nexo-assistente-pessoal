@@ -110,32 +110,10 @@
   letter-spacing: 2px;
   opacity: 0.84;
 }
-.card-cycle {
-  display: flex !important;
-  flex-direction: row !important;
-  gap: 8px !important;
-  margin-top: 12px;
-}
-.card-cycle span {
-  flex: 1;
-  display: flex !important;
-  flex-direction: row !important;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 7px 9px;
-  border: 1px solid #ffffff2e;
-  border-radius: 9px;
-  background: #ffffff12;
-  white-space: nowrap;
-}
-.card-cycle strong {
-  font-size: 10px !important;
-}
 .invoice-highlight {
   display: flex;
   flex-direction: column;
-  margin: 16px 0;
+  margin: 24px 0 18px;
 }
 .invoice-highlight strong {
   font-size: 29px !important;
@@ -167,11 +145,6 @@
 }
 .credit-card strong {
   font-size: 12px;
-}
-.card-hint {
-  margin-top: auto;
-  padding-top: 14px;
-  opacity: 0.75;
 }
 .purchases-modal {
   width: min(580px, calc(100vw - 28px));
