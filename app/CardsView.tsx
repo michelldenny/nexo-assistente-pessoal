@@ -49,6 +49,15 @@ type Data = {
   debts: Debt[];
   purchases: Purchase[];
 };
+type DebtSort =
+  | "newest"
+  | "oldest"
+  | "balance_desc"
+  | "balance_asc"
+  | "progress_desc"
+  | "progress_asc"
+  | "installment_desc"
+  | "installment_asc";
 const money = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
     v / 100,
@@ -98,12 +107,41 @@ export default function CardsView({
     [editingCardId, setEditingCardId] = useState<number | null>(null),
     [loading, setLoading] = useState(true),
     [saving, setSaving] = useState(false);
+  const [debtSort, setDebtSort] = useState<DebtSort>("newest");
   const [card, setCard] = useState(emptyCard),
     [purchase, setPurchase] = useState(emptyPurchase);
   const cardMap = useMemo(
     () => Object.fromEntries(data.cards.map((c) => [c.id, c])),
     [data.cards],
   );
+  const sortedDebts = useMemo(() => {
+    const dateKey = (debt: Debt) =>
+      debt.startDate || `${debt.startMonth || "0000-00"}-01`;
+    const balance = (debt: Debt) =>
+      Math.max(0, debt.totalCents - debt.paidCents);
+    const progress = (debt: Debt) =>
+      debt.installmentCount ? debt.paidInstallments / debt.installmentCount : 0;
+    return [...data.debts].sort((a, b) => {
+      switch (debtSort) {
+        case "oldest":
+          return dateKey(a).localeCompare(dateKey(b));
+        case "balance_desc":
+          return balance(b) - balance(a);
+        case "balance_asc":
+          return balance(a) - balance(b);
+        case "progress_desc":
+          return progress(b) - progress(a);
+        case "progress_asc":
+          return progress(a) - progress(b);
+        case "installment_desc":
+          return b.installmentCents - a.installmentCents;
+        case "installment_asc":
+          return a.installmentCents - b.installmentCents;
+        default:
+          return dateKey(b).localeCompare(dateKey(a));
+      }
+    });
+  }, [data.debts, debtSort]);
   async function load() {
     try {
       const r = await fetch("/api/cards", { cache: "no-store" }),
@@ -416,10 +454,26 @@ export default function CardsView({
             <p className="eyebrow">DETALHAMENTO</p>
             <h3>Parcelamentos</h3>
           </div>
+          <label className="debt-sort">
+            <span>Ordenar por</span>
+            <select
+              value={debtSort}
+              onChange={(event) => setDebtSort(event.target.value as DebtSort)}
+            >
+              <option value="newest">Mais atuais</option>
+              <option value="oldest">Mais antigas</option>
+              <option value="balance_desc">Saldo devedor: maior</option>
+              <option value="balance_asc">Saldo devedor: menor</option>
+              <option value="progress_desc">% paga: maior</option>
+              <option value="progress_asc">% paga: menor</option>
+              <option value="installment_desc">Valor da parcela: maior</option>
+              <option value="installment_asc">Valor da parcela: menor</option>
+            </select>
+          </label>
         </div>
         <div className="debt-grid">
           {data.debts.length ? (
-            data.debts.map((d) => {
+            sortedDebts.map((d) => {
               const itemPct = Math.round(
                 (d.paidInstallments / d.installmentCount) * 100,
               );
@@ -432,9 +486,12 @@ export default function CardsView({
                       </small>
                       <h3>{d.description}</h3>
                     </div>
-                    <strong>
-                      {d.paidInstallments}/{d.installmentCount}
-                    </strong>
+                    <div className="debt-progress-label">
+                      <strong>{itemPct}% pago</strong>
+                      <span>
+                        {d.paidInstallments}/{d.installmentCount}
+                      </span>
+                    </div>
                   </div>
                   <div className="progress">
                     <i style={{ width: `${itemPct}%` }} />
@@ -453,7 +510,12 @@ export default function CardsView({
                   </div>
                   <div className="debt-timeline">
                     <span>
-                      Início: <strong>{formatMonth(d.startMonth || d.startDate?.slice(0, 7) || "")}</strong>
+                      Início:{" "}
+                      <strong>
+                        {formatMonth(
+                          d.startMonth || d.startDate?.slice(0, 7) || "",
+                        )}
+                      </strong>
                     </span>
                     <span>
                       Término: <strong>{formatMonth(d.endMonth || "")}</strong>
@@ -561,9 +623,11 @@ export default function CardsView({
                 <div className="card-top">
                   <span>
                     <small>{c.bank}</small>
-                    <h3>{c.name}</h3>
+                    <div className="card-name-line">
+                      <h3>{c.name}</h3>
+                      <p>•••• {c.lastFour}</p>
+                    </div>
                   </span>
-                  <p>•••• {c.lastFour}</p>
                 </div>
                 <div className="invoice-highlight">
                   <small>
@@ -699,6 +763,28 @@ export default function CardsView({
                 />
               </label>
             </div>
+            <fieldset className="card-color-picker">
+              <legend>Cor do cartão</legend>
+              <div>
+                {[
+                  { value: "green", label: "Verde" },
+                  { value: "purple", label: "Roxo" },
+                  { value: "coral", label: "Coral" },
+                  { value: "lime", label: "Lima" },
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`${option.value} ${card.color === option.value ? "selected" : ""}`}
+                    onClick={() => setCard({ ...card, color: option.value })}
+                    aria-pressed={card.color === option.value}
+                  >
+                    <i />
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
             <button
               className="primary wide"
               disabled={saving}
@@ -753,11 +839,17 @@ export default function CardsView({
                         </small>
                       </div>
                       <span className="purchase-badge">
-                        {isInstallment ? `${p.installmentCount}x parcelas` : "À vista"}
+                        {isInstallment
+                          ? `${p.installmentCount}x parcelas`
+                          : "À vista"}
                       </span>
                       <div className="purchase-amount-col">
                         <b>{money(installmentValue)}</b>
-                        <small>{isInstallment ? `valor da parcela (Total: ${money(p.totalCents)})` : "valor total"}</small>
+                        <small>
+                          {isInstallment
+                            ? `valor da parcela (Total: ${money(p.totalCents)})`
+                            : "valor total"}
+                        </small>
                       </div>
                       <button
                         className="purchase-delete"
