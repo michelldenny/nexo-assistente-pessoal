@@ -223,6 +223,40 @@
   background: #b84c40;
   color: #fff;
 }
+.content-grid.finance-view {
+  grid-template-columns: minmax(0, 1fr);
+}
+.content-grid.finance-view .assistant-card {
+  display: none;
+}
+.content-grid.assistant-view {
+  grid-template-columns: minmax(320px, 720px);
+  justify-content: center;
+}
+.content-grid.assistant-view .main-column {
+  display: none;
+}
+.content-grid.assistant-view .assistant-card {
+  min-height: 680px;
+}
+.recurrence-delete-actions {
+  display: grid;
+  gap: 9px;
+  margin-top: 24px;
+}
+.recurrence-delete-actions button {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f7f9f6;
+  color: var(--ink);
+  font-weight: 750;
+}
+.recurrence-delete-actions .dialog-danger {
+  border-color: #b84c40;
+  background: #b84c40;
+  color: #fff;
+}
 .file-input {
   display: none;
 }
