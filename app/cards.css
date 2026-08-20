@@ -602,6 +602,53 @@
   font-size: 11px;
   font-weight: 700;
 }
+.debt-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.completed-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.completed-toggle i {
+  width: 25px;
+  height: 14px;
+  padding: 2px;
+  border-radius: 999px;
+  background: #dce5df;
+}
+.completed-toggle i::after {
+  content: "";
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px #2441372b;
+  transition: transform 0.18s ease;
+}
+.completed-toggle.active {
+  border-color: #b7d4c4;
+  color: var(--green);
+  background: #f5faf7;
+}
+.completed-toggle.active i {
+  background: var(--green);
+}
+.completed-toggle.active i::after {
+  transform: translateX(11px);
+}
 .debt-sort select {
   min-width: 210px;
   padding: 10px 34px 10px 12px;
@@ -724,6 +771,14 @@
     align-items: stretch;
     flex-direction: column;
     gap: 5px;
+  }
+  .debt-controls {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .completed-toggle {
+    justify-content: center;
   }
   .debt-sort select {
     width: 100%;

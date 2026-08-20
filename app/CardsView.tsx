@@ -146,6 +146,7 @@ export default function CardsView({
     [loading, setLoading] = useState(true),
     [saving, setSaving] = useState(false);
   const [debtSort, setDebtSort] = useState<DebtSort>("newest");
+  const [showCompletedDebts, setShowCompletedDebts] = useState(false);
   const [purchaseSort, setPurchaseSort] = useState<PurchaseSort>({
     field: "date",
     direction: "desc",
@@ -163,27 +164,32 @@ export default function CardsView({
       Math.max(0, debt.totalCents - debt.paidCents);
     const progress = (debt: Debt) =>
       debt.installmentCount ? debt.paidInstallments / debt.installmentCount : 0;
-    return [...data.debts].sort((a, b) => {
-      switch (debtSort) {
-        case "oldest":
-          return dateKey(a).localeCompare(dateKey(b));
-        case "balance_desc":
-          return balance(b) - balance(a);
-        case "balance_asc":
-          return balance(a) - balance(b);
-        case "progress_desc":
-          return progress(b) - progress(a);
-        case "progress_asc":
-          return progress(a) - progress(b);
-        case "installment_desc":
-          return b.installmentCents - a.installmentCents;
-        case "installment_asc":
-          return a.installmentCents - b.installmentCents;
-        default:
-          return dateKey(b).localeCompare(dateKey(a));
-      }
-    });
-  }, [data.debts, debtSort]);
+    return data.debts
+      .filter(
+        (debt) =>
+          showCompletedDebts || debt.paidInstallments < debt.installmentCount,
+      )
+      .sort((a, b) => {
+        switch (debtSort) {
+          case "oldest":
+            return dateKey(a).localeCompare(dateKey(b));
+          case "balance_desc":
+            return balance(b) - balance(a);
+          case "balance_asc":
+            return balance(a) - balance(b);
+          case "progress_desc":
+            return progress(b) - progress(a);
+          case "progress_asc":
+            return progress(a) - progress(b);
+          case "installment_desc":
+            return b.installmentCents - a.installmentCents;
+          case "installment_asc":
+            return a.installmentCents - b.installmentCents;
+          default:
+            return dateKey(b).localeCompare(dateKey(a));
+        }
+      });
+  }, [data.debts, debtSort, showCompletedDebts]);
   const selectedCardPurchases = useMemo(() => {
     if (!selectedCard) return [];
     const referenceMonth = selectedMonth || today().slice(0, 7);
@@ -193,20 +199,17 @@ export default function CardsView({
         const installments = data.installments
             .filter((part) => part.purchaseId === item.id)
             .sort((a, b) => a.installmentNumber - b.installmentNumber),
-          installment =
-            installments.find((part) => part.invoiceMonth === referenceMonth) ||
-            [...installments]
-              .reverse()
-              .find((part) => part.invoiceMonth <= referenceMonth) ||
-            installments[0];
+          installment = installments.find(
+            (part) => part.invoiceMonth === referenceMonth,
+          );
+        if (!installment) return null;
         return {
           ...item,
-          currentInstallmentNumber: installment?.installmentNumber || 1,
-          installmentCents:
-            installment?.amountCents ||
-            Math.round(item.totalCents / item.installmentCount),
+          currentInstallmentNumber: installment.installmentNumber,
+          installmentCents: installment.amountCents,
         };
       })
+      .filter((item): item is NonNullable<typeof item> => item !== null)
       .sort((a, b) => {
         const comparison =
           purchaseSort.field === "date"
@@ -580,25 +583,40 @@ export default function CardsView({
             <p className="eyebrow">DETALHAMENTO</p>
             <h3>Parcelamentos</h3>
           </div>
-          <label className="debt-sort">
-            <span>Ordenar por</span>
-            <select
-              value={debtSort}
-              onChange={(event) => setDebtSort(event.target.value as DebtSort)}
+          <div className="debt-controls">
+            <button
+              type="button"
+              className={`completed-toggle ${showCompletedDebts ? "active" : ""}`}
+              aria-pressed={showCompletedDebts}
+              onClick={() => setShowCompletedDebts((current) => !current)}
             >
-              <option value="newest">Mais atuais</option>
-              <option value="oldest">Mais antigas</option>
-              <option value="balance_desc">Saldo devedor: maior</option>
-              <option value="balance_asc">Saldo devedor: menor</option>
-              <option value="progress_desc">% paga: maior</option>
-              <option value="progress_asc">% paga: menor</option>
-              <option value="installment_desc">Valor da parcela: maior</option>
-              <option value="installment_asc">Valor da parcela: menor</option>
-            </select>
-          </label>
+              <i aria-hidden="true" />
+              Mostrar concluídas
+            </button>
+            <label className="debt-sort">
+              <span>Ordenar por</span>
+              <select
+                value={debtSort}
+                onChange={(event) =>
+                  setDebtSort(event.target.value as DebtSort)
+                }
+              >
+                <option value="newest">Mais atuais</option>
+                <option value="oldest">Mais antigas</option>
+                <option value="balance_desc">Saldo devedor: maior</option>
+                <option value="balance_asc">Saldo devedor: menor</option>
+                <option value="progress_desc">% paga: maior</option>
+                <option value="progress_asc">% paga: menor</option>
+                <option value="installment_desc">
+                  Valor da parcela: maior
+                </option>
+                <option value="installment_asc">Valor da parcela: menor</option>
+              </select>
+            </label>
+          </div>
         </div>
         <div className="debt-grid">
-          {data.debts.length ? (
+          {sortedDebts.length ? (
             sortedDebts.map((d) => {
               const itemPct = Math.round(
                 (d.paidInstallments / d.installmentCount) * 100,
@@ -652,8 +670,16 @@ export default function CardsView({
             })
           ) : (
             <div className="agenda-empty">
-              <strong>Nenhuma dívida parcelada.</strong>
-              <small>Compras em mais de 1x aparecerão aqui.</small>
+              <strong>
+                {data.debts.length
+                  ? "Todos os parcelamentos estão concluídos."
+                  : "Nenhuma dívida parcelada."}
+              </strong>
+              <small>
+                {data.debts.length
+                  ? "Ative “Mostrar concluídas” para visualizar o histórico."
+                  : "Compras em mais de 1x aparecerão aqui."}
+              </small>
             </div>
           )}
         </div>
@@ -949,7 +975,9 @@ export default function CardsView({
               {selectedCard.bank} · •••• {selectedCard.lastFour}
             </p>
             <div className="purchase-title-row">
-              <h2>Compras de {selectedCard.name}</h2>
+              <h2>
+                Compras de {selectedCard.name} · {formatMonth(activeMonth)}
+              </h2>
               <div className="purchase-sort" aria-label="Ordenar compras">
                 {(["date", "value"] as const).map((field) => {
                   const active = purchaseSort.field === field;
@@ -1030,7 +1058,7 @@ export default function CardsView({
               })}
               {!selectedCardPurchases.length && (
                 <div className="agenda-empty">
-                  <strong>Nenhuma compra neste cartão.</strong>
+                  <strong>Nenhuma compra nesta fatura.</strong>
                 </div>
               )}
             </div>
