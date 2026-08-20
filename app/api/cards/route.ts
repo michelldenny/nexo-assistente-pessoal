@@ -178,11 +178,55 @@ export async function POST(req: Request) {
 }
 export async function PATCH(req: Request) {
   try {
-    const b = (await req.json()) as { action?: string; invoiceId?: number };
+    const b = (await req.json()) as Record<string, unknown>;
+    const db = getSupabase();
+    if (b.action === "update_card") {
+      const id = Math.round(Number(b.cardId)),
+        name = String(b.name ?? "").trim(),
+        bank = String(b.bank ?? "").trim(),
+        last = String(b.lastFour ?? "")
+          .replace(/\D/g, "")
+          .slice(-4),
+        limit = Math.round(Number(b.creditLimitCents)),
+        closing = Math.round(Number(b.closingDay)),
+        due = Math.round(Number(b.dueDay));
+      if (
+        !id ||
+        !name ||
+        !bank ||
+        last.length !== 4 ||
+        limit <= 0 ||
+        closing < 1 ||
+        closing > 28 ||
+        due < 1 ||
+        due > 28
+      )
+        return Response.json(
+          { error: "Preencha os dados do cartão corretamente." },
+          { status: 400 },
+        );
+      const { data, error } = await db
+        .from("credit_cards")
+        .update({
+          name,
+          bank,
+          last_four: last,
+          credit_limit_cents: limit,
+          closing_day: closing,
+          due_day: due,
+          color: String(b.color ?? "green"),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .is("deleted_at", null)
+        .select()
+        .single();
+      if (error) throw error;
+      return Response.json({ card: camel(data) });
+    }
     if (b.action !== "pay_invoice")
       return Response.json({ error: "Ação inválida." }, { status: 400 });
-    const db = getSupabase(),
-      id = Math.round(Number(b.invoiceId)),
+    const id = Math.round(Number(b.invoiceId)),
       { data: i, error } = await db
         .from("card_invoices")
         .select("*")
@@ -224,12 +268,41 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    const id = Math.round(
-      Number(new URL(req.url).searchParams.get("purchaseId")),
-    );
+    const params = new URL(req.url).searchParams;
+    const cardId = Math.round(Number(params.get("cardId")));
+    const id = Math.round(Number(params.get("purchaseId")));
+    const db = getSupabase();
+    if (cardId) {
+      const { data: invoices, error: invoiceError } = await db
+        .from("card_invoices")
+        .select("id")
+        .eq("card_id", cardId);
+      if (invoiceError) throw invoiceError;
+      const invoiceIds = (invoices ?? []).map((invoice) => invoice.id);
+      if (invoiceIds.length) {
+        const transactions = await db
+          .from("transactions")
+          .delete()
+          .in("invoice_id", invoiceIds);
+        if (transactions.error) throw transactions.error;
+      }
+      for (const table of [
+        "card_installments",
+        "card_purchases",
+        "card_invoices",
+      ] as const) {
+        const removed = await db.from(table).delete().eq("card_id", cardId);
+        if (removed.error) throw removed.error;
+      }
+      const removedCard = await db
+        .from("credit_cards")
+        .delete()
+        .eq("id", cardId);
+      if (removedCard.error) throw removedCard.error;
+      return Response.json({ deleted: true });
+    }
     if (!id)
       return Response.json({ error: "Compra inválida." }, { status: 400 });
-    const db = getSupabase();
     const { data: purchase, error: purchaseError } = await db
       .from("card_purchases")
       .select("id,card_id")

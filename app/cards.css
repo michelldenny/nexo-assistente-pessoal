@@ -16,10 +16,46 @@
   box-shadow: 0 16px 35px #17483a2b;
   display: flex;
   flex-direction: column;
+  position: relative;
+  font: inherit;
   cursor: pointer;
   transition:
     transform 0.2s,
     box-shadow 0.2s;
+}
+.card-actions {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.credit-card:hover .card-actions,
+.credit-card:focus-within .card-actions {
+  opacity: 1;
+}
+.card-actions button {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #ffffff45;
+  border-radius: 9px;
+  background: #ffffff24;
+  color: #fff;
+}
+.card-actions button:hover {
+  background: #ffffff3b;
+}
+.card-actions .danger {
+  background: #6d1f2438;
+}
+.card-top p {
+  margin-right: 76px;
 }
 .credit-card:hover {
   transform: translateY(-3px);
@@ -348,6 +384,9 @@
   }
 }
 @media (max-width: 700px) {
+  .card-actions {
+    opacity: 1;
+  }
   .cards-grid,
   .debt-grid {
     grid-template-columns: minmax(0, 1fr);
