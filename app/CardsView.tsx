@@ -43,11 +43,21 @@ type Purchase = {
   totalCents: number;
   installmentCount: number;
 };
+type Installment = {
+  id: number;
+  purchaseId: number;
+  cardId: number;
+  installmentNumber: number;
+  amountCents: number;
+  invoiceMonth: string;
+  status: "pending" | "paid";
+};
 type Data = {
   cards: Card[];
   invoices: Invoice[];
   debts: Debt[];
   purchases: Purchase[];
+  installments: Installment[];
 };
 type DebtSort =
   | "newest"
@@ -104,6 +114,7 @@ export default function CardsView({
     invoices: [],
     debts: [],
     purchases: [],
+    installments: [],
   });
   const [cardModal, setCardModal] = useState(false),
     [purchaseModal, setPurchaseModal] = useState(false),
@@ -156,20 +167,45 @@ export default function CardsView({
         : 0,
       maxCents = purchaseFilters.maxValue
         ? parseMoneyInput(purchaseFilters.maxValue)
-        : Number.POSITIVE_INFINITY;
+        : Number.POSITIVE_INFINITY,
+      referenceMonth = selectedMonth || today().slice(0, 7);
     return data.purchases
       .filter((item) => item.cardId === selectedCard.id)
+      .map((item) => {
+        const installments = data.installments
+            .filter((part) => part.purchaseId === item.id)
+            .sort((a, b) => a.installmentNumber - b.installmentNumber),
+          installment =
+            installments.find((part) => part.invoiceMonth === referenceMonth) ||
+            [...installments]
+              .reverse()
+              .find((part) => part.invoiceMonth <= referenceMonth) ||
+            installments[0];
+        return {
+          ...item,
+          currentInstallmentNumber: installment?.installmentNumber || 1,
+          installmentCents:
+            installment?.amountCents ||
+            Math.round(item.totalCents / item.installmentCount),
+        };
+      })
       .filter(
         (item) =>
           (!purchaseFilters.startDate ||
             item.purchaseDate >= purchaseFilters.startDate) &&
           (!purchaseFilters.endDate ||
             item.purchaseDate <= purchaseFilters.endDate) &&
-          item.totalCents >= minCents &&
-          item.totalCents <= maxCents,
+          item.installmentCents >= minCents &&
+          item.installmentCents <= maxCents,
       )
       .sort((a, b) => b.purchaseDate.localeCompare(a.purchaseDate));
-  }, [data.purchases, purchaseFilters, selectedCard]);
+  }, [
+    data.installments,
+    data.purchases,
+    purchaseFilters,
+    selectedCard,
+    selectedMonth,
+  ]);
   const hasPurchaseFilters = Object.values(purchaseFilters).some(Boolean);
   async function load() {
     try {
@@ -939,34 +975,28 @@ export default function CardsView({
             </section>
             <div className="purchase-list">
               {selectedCardPurchases.map((p) => {
-                const isInstallment = p.installmentCount > 1;
-                const installmentValue = isInstallment
-                  ? Math.round(p.totalCents / p.installmentCount)
-                  : p.totalCents;
                 return (
                   <article key={p.id} className="purchase-item">
-                    <div className="purchase-item-info">
-                      <strong>{p.description}</strong>
-                      <small>
-                        {p.category} ·{" "}
-                        {new Date(
-                          p.purchaseDate + "T12:00:00Z",
-                        ).toLocaleDateString("pt-BR", { timeZone: "UTC" })}
-                      </small>
-                    </div>
-                    <span className="purchase-badge">
-                      {isInstallment
-                        ? `${p.installmentCount}x parcelas`
-                        : "À vista"}
+                    <time className="purchase-date" dateTime={p.purchaseDate}>
+                      {new Date(
+                        p.purchaseDate + "T12:00:00Z",
+                      ).toLocaleDateString("pt-BR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        timeZone: "UTC",
+                      })}
+                    </time>
+                    <span className="purchase-category">{p.category}</span>
+                    <span className="purchase-installment">
+                      {String(p.currentInstallmentNumber).padStart(2, "0")}/
+                      {String(p.installmentCount).padStart(2, "0")}
                     </span>
-                    <div className="purchase-amount-col">
-                      <b>{money(installmentValue)}</b>
-                      <small>
-                        {isInstallment
-                          ? `valor da parcela (Total: ${money(p.totalCents)})`
-                          : "valor total"}
-                      </small>
-                    </div>
+                    <strong className="purchase-description">
+                      {p.description}
+                    </strong>
+                    <b className="purchase-amount">
+                      {money(p.installmentCents)}
+                    </b>
                     <button
                       className="purchase-delete"
                       onClick={() => setPurchaseToDelete(p)}

@@ -209,9 +209,11 @@
 }
 .purchase-list article {
   display: grid;
-  grid-template-columns: 1fr auto auto auto;
+  grid-template-columns:
+    58px minmax(72px, 0.8fr) 62px minmax(130px, 1.6fr)
+    auto auto;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   padding: 13px 15px;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -221,17 +223,27 @@
 .purchase-list article:hover {
   background: #fafbf9;
 }
-.purchase-item-info {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+.purchase-date,
+.purchase-category,
+.purchase-installment,
+.purchase-description,
+.purchase-amount {
   min-width: 0;
-}
-.purchase-item-info strong {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--ink);
 }
-.purchase-badge {
+.purchase-date {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.purchase-category {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.purchase-installment {
+  justify-self: start;
   font-size: 10.5px;
   font-weight: 700;
   color: #163e32;
@@ -241,21 +253,16 @@
   border-radius: 7px;
   white-space: nowrap;
 }
-.purchase-amount-col {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-  min-width: 90px;
-}
-.purchase-amount-col b {
-  font-size: 13.5px;
-  color: var(--ink);
-}
-.purchase-amount-col small {
-  font-size: 9px;
-  color: var(--muted);
+.purchase-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+.purchase-amount {
+  justify-self: end;
+  font-size: 13px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 .purchase-delete {
   width: 32px;
@@ -361,21 +368,6 @@
   min-height: 7px;
   border-radius: 8px 8px 3px 3px;
   background: linear-gradient(180deg, #79b895, var(--green));
-}
-.purchase-list article div {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.purchase-list small {
-  color: var(--muted);
-}
-.purchase-list span {
-  font-size: 11px;
-  color: var(--green);
-  background: #edf5f0;
-  padding: 5px 8px;
-  border-radius: 8px;
 }
 .invoice-list {
   display: grid;
@@ -645,14 +637,19 @@
     padding: 20px;
   }
   .purchase-list article {
-    grid-template-columns: 1fr auto auto;
+    grid-template-columns: 52px minmax(0, 1fr) 58px auto;
     gap: 10px;
   }
   .purchase-filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .purchase-item-info {
-    grid-column: 1 / -1;
+  .purchase-description {
+    grid-column: 1 / 4;
+    grid-row: 2;
+  }
+  .purchase-amount {
+    grid-column: 4;
+    grid-row: 2;
   }
   .cards-chart {
     padding: 18px 12px;
