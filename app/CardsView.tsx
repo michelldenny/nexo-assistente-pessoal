@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { TRANSACTION_CATEGORIES } from "./categories";
+import { CATEGORY_COLORS, TRANSACTION_CATEGORIES } from "./categories";
 import ConfirmDialog from "./ConfirmDialog";
 import { formatMoneyInput, formatMonth, parseMoneyInput } from "./ui-format";
 type Card = {
@@ -68,6 +68,10 @@ type DebtSort =
   | "progress_asc"
   | "installment_desc"
   | "installment_asc";
+type PurchaseSort = {
+  field: "date" | "value";
+  direction: "asc" | "desc";
+};
 const money = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
     v / 100,
@@ -92,11 +96,27 @@ const emptyPurchase = {
   installmentCount: "1",
   valueMode: "total" as "total" | "installment",
 };
-const emptyPurchaseFilters = {
-  startDate: "",
-  endDate: "",
-  minValue: "",
-  maxValue: "",
+const CATEGORY_ICONS: Record<string, string> = {
+  Alimentação: "🍔",
+  Apê: "🏠",
+  Assinaturas: "📱",
+  Besteira: "🍕",
+  Carro: "🚗",
+  Comemoração: "🎉",
+  "Doação e Oferta": "🙌",
+  Estudos: "📚",
+  Ifood: "🛍️",
+  Imposto: "📋",
+  Investimento: "📈",
+  Lazer: "🎮",
+  Lucas: "👤",
+  Mercado: "🛒",
+  Pessoal: "👤",
+  Presente: "🎁",
+  Saúde: "💊",
+  Transporte: "🚙",
+  Viagem: "✈️",
+  Outros: "🏷️",
 };
 export default function CardsView({
   mode,
@@ -125,7 +145,11 @@ export default function CardsView({
     [loading, setLoading] = useState(true),
     [saving, setSaving] = useState(false);
   const [debtSort, setDebtSort] = useState<DebtSort>("newest");
-  const [purchaseFilters, setPurchaseFilters] = useState(emptyPurchaseFilters);
+  const [purchaseSort, setPurchaseSort] = useState<PurchaseSort>({
+    field: "date",
+    direction: "desc",
+  });
+  const [purchasePage, setPurchasePage] = useState(0);
   const [card, setCard] = useState(emptyCard),
     [purchase, setPurchase] = useState(emptyPurchase);
   const cardMap = useMemo(
@@ -162,13 +186,7 @@ export default function CardsView({
   }, [data.debts, debtSort]);
   const selectedCardPurchases = useMemo(() => {
     if (!selectedCard) return [];
-    const minCents = purchaseFilters.minValue
-        ? parseMoneyInput(purchaseFilters.minValue)
-        : 0,
-      maxCents = purchaseFilters.maxValue
-        ? parseMoneyInput(purchaseFilters.maxValue)
-        : Number.POSITIVE_INFINITY,
-      referenceMonth = selectedMonth || today().slice(0, 7);
+    const referenceMonth = selectedMonth || today().slice(0, 7);
     return data.purchases
       .filter((item) => item.cardId === selectedCard.id)
       .map((item) => {
@@ -189,24 +207,30 @@ export default function CardsView({
             Math.round(item.totalCents / item.installmentCount),
         };
       })
-      .filter(
-        (item) =>
-          (!purchaseFilters.startDate ||
-            item.purchaseDate >= purchaseFilters.startDate) &&
-          (!purchaseFilters.endDate ||
-            item.purchaseDate <= purchaseFilters.endDate) &&
-          item.installmentCents >= minCents &&
-          item.installmentCents <= maxCents,
-      )
-      .sort((a, b) => b.purchaseDate.localeCompare(a.purchaseDate));
+      .sort((a, b) => {
+        const comparison =
+          purchaseSort.field === "date"
+            ? a.purchaseDate.localeCompare(b.purchaseDate)
+            : a.installmentCents - b.installmentCents;
+        return purchaseSort.direction === "asc" ? comparison : -comparison;
+      });
   }, [
     data.installments,
     data.purchases,
-    purchaseFilters,
+    purchaseSort,
     selectedCard,
     selectedMonth,
   ]);
-  const hasPurchaseFilters = Object.values(purchaseFilters).some(Boolean);
+  const purchasesPerPage = 5,
+    purchasePageCount = Math.max(
+      1,
+      Math.ceil(selectedCardPurchases.length / purchasesPerPage),
+    ),
+    safePurchasePage = Math.min(purchasePage, purchasePageCount - 1),
+    visibleCardPurchases = selectedCardPurchases.slice(
+      safePurchasePage * purchasesPerPage,
+      (safePurchasePage + 1) * purchasesPerPage,
+    );
   async function load() {
     try {
       const r = await fetch("/api/cards", { cache: "no-store" }),
@@ -228,8 +252,19 @@ export default function CardsView({
     setCardModal(true);
   }
   function openCardPurchases(item: Card) {
-    setPurchaseFilters(emptyPurchaseFilters);
+    setPurchaseSort({ field: "date", direction: "desc" });
+    setPurchasePage(0);
     setSelectedCard(item);
+  }
+  function togglePurchaseSort(field: PurchaseSort["field"]) {
+    setPurchaseSort((current) => ({
+      field,
+      direction:
+        current.field === field && current.direction === "desc"
+          ? "asc"
+          : "desc",
+    }));
+    setPurchasePage(0);
   }
   function openEditCard(item: Card) {
     setEditingCardId(item.id);
@@ -886,114 +921,64 @@ export default function CardsView({
             <p className="eyebrow">
               {selectedCard.bank} · •••• {selectedCard.lastFour}
             </p>
-            <h2>Compras de {selectedCard.name}</h2>
-            <section
-              className="purchase-filters"
-              aria-label="Filtros das compras"
-            >
-              <div className="purchase-filter-head">
-                <strong>Filtrar transações</strong>
-                {hasPurchaseFilters && (
-                  <button
-                    onClick={() => setPurchaseFilters(emptyPurchaseFilters)}
-                  >
-                    Limpar filtros
-                  </button>
-                )}
+            <div className="purchase-title-row">
+              <h2>Compras de {selectedCard.name}</h2>
+              <div className="purchase-sort" aria-label="Ordenar compras">
+                {(["date", "value"] as const).map((field) => {
+                  const active = purchaseSort.field === field;
+                  return (
+                    <button
+                      key={field}
+                      className={active ? "active" : ""}
+                      onClick={() => togglePurchaseSort(field)}
+                      aria-pressed={active}
+                      aria-label={`Ordenar por ${field === "date" ? "data" : "valor"}`}
+                    >
+                      <span aria-hidden="true">
+                        {field === "date" ? "▣" : "R$"}
+                      </span>
+                      {field === "date" ? "Data" : "Valor"}
+                      {active && (
+                        <b aria-hidden="true">
+                          {purchaseSort.direction === "desc" ? "↓" : "↑"}
+                        </b>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
-              <div className="purchase-filter-grid">
-                <label>
-                  Data inicial
-                  <input
-                    type="date"
-                    value={purchaseFilters.startDate}
-                    max={purchaseFilters.endDate || undefined}
-                    onChange={(event) =>
-                      setPurchaseFilters((current) => ({
-                        ...current,
-                        startDate: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-                <label>
-                  Data final
-                  <input
-                    type="date"
-                    value={purchaseFilters.endDate}
-                    min={purchaseFilters.startDate || undefined}
-                    onChange={(event) =>
-                      setPurchaseFilters((current) => ({
-                        ...current,
-                        endDate: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-                <label>
-                  Valor mínimo
-                  <input
-                    inputMode="numeric"
-                    placeholder="0,00"
-                    value={purchaseFilters.minValue}
-                    onChange={(event) =>
-                      setPurchaseFilters((current) => ({
-                        ...current,
-                        minValue: event.target.value
-                          ? formatMoneyInput(event.target.value)
-                          : "",
-                      }))
-                    }
-                  />
-                </label>
-                <label>
-                  Valor máximo
-                  <input
-                    inputMode="numeric"
-                    placeholder="0,00"
-                    value={purchaseFilters.maxValue}
-                    onChange={(event) =>
-                      setPurchaseFilters((current) => ({
-                        ...current,
-                        maxValue: event.target.value
-                          ? formatMoneyInput(event.target.value)
-                          : "",
-                      }))
-                    }
-                  />
-                </label>
-              </div>
-              <small className="purchase-filter-count">
-                {selectedCardPurchases.length} de{" "}
-                {
-                  data.purchases.filter(
-                    (item) => item.cardId === selectedCard.id,
-                  ).length
-                }{" "}
-                transações
-              </small>
-            </section>
+            </div>
             <div className="purchase-list">
-              {selectedCardPurchases.map((p) => {
+              {visibleCardPurchases.map((p) => {
                 return (
                   <article key={p.id} className="purchase-item">
-                    <time className="purchase-date" dateTime={p.purchaseDate}>
-                      {new Date(
-                        p.purchaseDate + "T12:00:00Z",
-                      ).toLocaleDateString("pt-BR", {
-                        day: "2-digit",
-                        month: "2-digit",
-                        timeZone: "UTC",
-                      })}
-                    </time>
-                    <span className="purchase-category">{p.category}</span>
-                    <span className="purchase-installment">
-                      {String(p.currentInstallmentNumber).padStart(2, "0")}/
-                      {String(p.installmentCount).padStart(2, "0")}
+                    <span
+                      className="purchase-icon"
+                      aria-hidden="true"
+                      style={{
+                        backgroundColor: `${CATEGORY_COLORS[p.category] || CATEGORY_COLORS.Outros}16`,
+                      }}
+                    >
+                      {CATEGORY_ICONS[p.category] || CATEGORY_ICONS.Outros}
                     </span>
-                    <strong className="purchase-description">
-                      {p.description}
-                    </strong>
+                    <div className="purchase-info">
+                      <strong>{p.description}</strong>
+                      <div>
+                        <time dateTime={p.purchaseDate}>
+                          {new Date(
+                            p.purchaseDate + "T12:00:00Z",
+                          ).toLocaleDateString("pt-BR", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            timeZone: "UTC",
+                          })}
+                        </time>
+                        <span className="purchase-category">{p.category}</span>
+                        <span className="purchase-installment">
+                          ({p.currentInstallmentNumber}/{p.installmentCount})
+                        </span>
+                      </div>
+                    </div>
                     <b className="purchase-amount">
                       {money(p.installmentCents)}
                     </b>
@@ -1010,22 +995,38 @@ export default function CardsView({
               })}
               {!selectedCardPurchases.length && (
                 <div className="agenda-empty">
-                  <strong>
-                    {hasPurchaseFilters
-                      ? "Nenhuma transação encontrada com esses filtros."
-                      : "Nenhuma compra neste cartão."}
-                  </strong>
-                  {hasPurchaseFilters && (
-                    <button
-                      className="link-button"
-                      onClick={() => setPurchaseFilters(emptyPurchaseFilters)}
-                    >
-                      Limpar filtros
-                    </button>
-                  )}
+                  <strong>Nenhuma compra neste cartão.</strong>
                 </div>
               )}
             </div>
+            {selectedCardPurchases.length > purchasesPerPage && (
+              <footer className="purchase-pagination">
+                <span>
+                  {safePurchasePage * purchasesPerPage + 1}–
+                  {Math.min(
+                    (safePurchasePage + 1) * purchasesPerPage,
+                    selectedCardPurchases.length,
+                  )}{" "}
+                  de {selectedCardPurchases.length}
+                </span>
+                <div>
+                  <button
+                    onClick={() => setPurchasePage(safePurchasePage - 1)}
+                    disabled={safePurchasePage === 0}
+                    aria-label="Página anterior"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    onClick={() => setPurchasePage(safePurchasePage + 1)}
+                    disabled={safePurchasePage >= purchasePageCount - 1}
+                    aria-label="Próxima página"
+                  >
+                    ›
+                  </button>
+                </div>
+              </footer>
+            )}
           </div>
         </div>
       )}
