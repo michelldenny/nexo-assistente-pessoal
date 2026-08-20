@@ -230,7 +230,8 @@ export default function CardsView({
     visibleCardPurchases = selectedCardPurchases.slice(
       safePurchasePage * purchasesPerPage,
       (safePurchasePage + 1) * purchasesPerPage,
-    );
+    ),
+    activeMonth = selectedMonth || today().slice(0, 7);
   async function load() {
     try {
       const r = await fetch("/api/cards", { cache: "no-store" }),
@@ -676,14 +677,16 @@ export default function CardsView({
       ) : (
         <div className="cards-grid">
           {data.cards.map((c) => {
-            const openInvoices = data.invoices.filter(
-                (i) =>
-                  i.cardId === c.id && i.status === "open" && i.totalCents > 0,
+            const cardInvoices = data.invoices.filter(
+                (invoice) => invoice.cardId === c.id && invoice.totalCents > 0,
+              ),
+              openInvoices = cardInvoices.filter(
+                (invoice) => invoice.status === "open",
               ),
               used = openInvoices.reduce((s, i) => s + i.totalCents, 0),
-              current = [...openInvoices].sort((a, b) =>
-                a.referenceMonth.localeCompare(b.referenceMonth),
-              )[0],
+              current = cardInvoices.find(
+                (invoice) => invoice.referenceMonth === activeMonth,
+              ),
               available = Math.max(0, c.creditLimitCents - used),
               pct = Math.min(
                 100,
@@ -734,10 +737,7 @@ export default function CardsView({
                   </span>
                 </div>
                 <div className="invoice-highlight">
-                  <small>
-                    Fatura atual{" "}
-                    {current ? formatMonth(current.referenceMonth) : ""}
-                  </small>
+                  <small>Fatura {formatMonth(activeMonth)}</small>
                   <strong>{money(current?.totalCents ?? 0)}</strong>
                 </div>
                 <div className="limit-progress">
