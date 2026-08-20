@@ -757,6 +757,14 @@ export default function CardsView({
                     </div>
                   </span>
                 </div>
+                <div className="card-cycle">
+                  <span>
+                    Fechamento<strong>Dia {c.closingDay}</strong>
+                  </span>
+                  <span>
+                    Vencimento<strong>Dia {c.dueDay}</strong>
+                  </span>
+                </div>
                 <div className="invoice-highlight">
                   <small>Fatura {formatMonth(activeMonth)}</small>
                   <strong>{money(current?.totalCents ?? 0)}</strong>

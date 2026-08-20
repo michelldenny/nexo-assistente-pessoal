@@ -48,6 +48,8 @@ const addMonths = (month: string, count: number) => {
   const date = new Date(Date.UTC(year, monthNumber - 1 + count, 1));
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 };
+const firstInvoiceMonth = (date: string, closingDay: number) =>
+  addMonths(date.slice(0, 7), Number(date.slice(8, 10)) > closingDay ? 1 : 0);
 const cardColor = (value: unknown) => {
   const color = String(value ?? "");
   if (color.includes("purple")) return "purple";
@@ -251,6 +253,7 @@ async function importBackup(backup: ReturnType<typeof parseBackup>) {
     .is("deleted_at", null);
   if (cardReadError) throw cardReadError;
   const cardMap = new Map<string, number>();
+  const cardClosingMap = new Map<string, number>();
   for (const legacyCard of backup.cards) {
     const id = String(legacyCard.id ?? "").trim();
     if (!id || !legacyCard.name?.trim()) {
@@ -265,6 +268,7 @@ async function importBackup(backup: ReturnType<typeof parseBackup>) {
     );
     if (existing) {
       cardMap.set(id, existing.id);
+      cardClosingMap.set(id, Number(existing.closing_day) || 1);
       report.duplicates += 1;
       if (!existing.legacy_id) {
         const linked = await db
@@ -298,6 +302,7 @@ async function importBackup(backup: ReturnType<typeof parseBackup>) {
     if (inserted.error) throw inserted.error;
     existing = inserted.data;
     cardMap.set(id, existing.id);
+    cardClosingMap.set(id, Number(existing.closing_day) || 1);
     report.cards += 1;
   }
 
@@ -372,7 +377,9 @@ async function importBackup(backup: ReturnType<typeof parseBackup>) {
     }>;
   }> = [];
   for (const row of singles) {
-    const cardId = cardMap.get(String(row.cardId ?? ""));
+    const legacyCardId = String(row.cardId ?? "");
+    const cardId = cardMap.get(legacyCardId);
+    const closingDay = cardClosingMap.get(legacyCardId) ?? 1;
     const amountCents = cents(row.amount);
     const date = normalizeDate(row.date);
     if (!cardId || !row.id || amountCents <= 0 || !date) {
@@ -393,7 +400,7 @@ async function importBackup(backup: ReturnType<typeof parseBackup>) {
         {
           number: 1,
           amountCents,
-          invoiceMonth: date.slice(0, 7),
+          invoiceMonth: firstInvoiceMonth(date, closingDay),
           status: paidStatus(row.status) ? "paid" : "pending",
         },
       ],
