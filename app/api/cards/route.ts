@@ -6,10 +6,114 @@ const addMonths = (month: string, count: number) => {
 };
 const firstMonth = (date: string, closing: number) =>
   addMonths(date.slice(0, 7), Number(date.slice(8, 10)) > closing ? 1 : 0);
-type CardRow = { id: number; name: string; bank: string; lastFour: string; creditLimitCents: number; closingDay: number; dueDay: number; color: string };
-type PurchaseRow = { id: number; cardId: number; description: string; category: string; purchaseDate: string; totalCents: number; installmentCount: number };
-type InstallmentRow = { id: number; purchaseId: number; cardId: number; installmentNumber: number; amountCents: number; invoiceMonth: string; status: "pending" | "paid" };
-type InvoiceRow = { id: number; cardId: number; referenceMonth: string; status: "open" | "paid" };
+async function reconcileInvoiceMonth(
+  db: ReturnType<typeof getSupabase>,
+  cardId: number,
+  referenceMonth: string,
+) {
+  const [
+    { data: parts, error: partsError },
+    { data: invoice, error: invoiceError },
+  ] = await Promise.all([
+    db
+      .from("card_installments")
+      .select("amount_cents,status")
+      .eq("card_id", cardId)
+      .eq("invoice_month", referenceMonth),
+    db
+      .from("card_invoices")
+      .select("id,status")
+      .eq("card_id", cardId)
+      .eq("reference_month", referenceMonth)
+      .maybeSingle(),
+  ]);
+  if (partsError) throw partsError;
+  if (invoiceError) throw invoiceError;
+  if (!parts?.length) {
+    if (!invoice) return;
+    const transaction = await db
+      .from("transactions")
+      .delete()
+      .eq("invoice_id", invoice.id);
+    if (transaction.error) throw transaction.error;
+    const removed = await db
+      .from("card_invoices")
+      .delete()
+      .eq("id", invoice.id);
+    if (removed.error) throw removed.error;
+    return;
+  }
+  const total = parts.reduce(
+      (sum, part) => sum + Number(part.amount_cents || 0),
+      0,
+    ),
+    isPaid = parts.every((part) => part.status === "paid"),
+    paidAt = isPaid ? new Date().toISOString() : null;
+  let invoiceId = invoice?.id as number | undefined;
+  if (invoiceId) {
+    const updated = await db
+      .from("card_invoices")
+      .update({ status: isPaid ? "paid" : "open", paid_at: paidAt })
+      .eq("id", invoiceId);
+    if (updated.error) throw updated.error;
+  } else {
+    const inserted = await db
+      .from("card_invoices")
+      .insert({
+        card_id: cardId,
+        reference_month: referenceMonth,
+        status: isPaid ? "paid" : "open",
+        paid_at: paidAt,
+      })
+      .select("id")
+      .single();
+    if (inserted.error) throw inserted.error;
+    invoiceId = inserted.data.id;
+  }
+  const transaction = await db
+    .from("transactions")
+    .update({
+      amount_cents: total,
+      status: isPaid ? "settled" : "pending",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("invoice_id", invoiceId);
+  if (transaction.error) throw transaction.error;
+}
+type CardRow = {
+  id: number;
+  name: string;
+  bank: string;
+  lastFour: string;
+  creditLimitCents: number;
+  closingDay: number;
+  dueDay: number;
+  color: string;
+};
+type PurchaseRow = {
+  id: number;
+  cardId: number;
+  description: string;
+  category: string;
+  purchaseDate: string;
+  totalCents: number;
+  installmentCount: number;
+};
+type InstallmentRow = {
+  id: number;
+  purchaseId: number;
+  cardId: number;
+  installmentNumber: number;
+  amountCents: number;
+  invoiceMonth: string;
+  status: "pending" | "paid";
+};
+type InvoiceRow = {
+  id: number;
+  cardId: number;
+  referenceMonth: string;
+  status: "open" | "paid";
+};
 
 export async function GET() {
   try {
@@ -40,7 +144,9 @@ export async function GET() {
       .map((p) => {
         const parts = installments
           .filter((i) => i.purchaseId === p.id)
-          .sort((a, b) => Number(a.installmentNumber) - Number(b.installmentNumber));
+          .sort(
+            (a, b) => Number(a.installmentNumber) - Number(b.installmentNumber),
+          );
         const paid = parts.filter((i) => i.status === "paid");
         const startMonth =
           typeof parts[0]?.invoiceMonth === "string"
@@ -49,14 +155,20 @@ export async function GET() {
         const endMonth =
           typeof parts[parts.length - 1]?.invoiceMonth === "string"
             ? String(parts[parts.length - 1].invoiceMonth)
-            : addMonths(startMonth, Math.max(0, Number(p.installmentCount) - 1));
+            : addMonths(
+                startMonth,
+                Math.max(0, Number(p.installmentCount) - 1),
+              );
         return {
           ...p,
           startDate: p.purchaseDate,
           startMonth,
           endMonth,
           paidInstallments: paid.length,
-          paidCents: paid.reduce((s: number, i) => s + (Number(i.amountCents) || 0), 0),
+          paidCents: paid.reduce(
+            (s: number, i) => s + (Number(i.amountCents) || 0),
+            0,
+          ),
           installmentCents: Number(parts[0]?.amountCents) || 0,
         };
       });
@@ -241,6 +353,116 @@ export async function PATCH(req: Request) {
         .single();
       if (error) throw error;
       return Response.json({ card: camel(data) });
+    }
+    if (b.action === "update_purchase") {
+      const id = Math.round(Number(b.purchaseId)),
+        cardId = Math.round(Number(b.cardId)),
+        total = Math.round(Number(b.totalCents)),
+        count = Math.round(Number(b.installmentCount)),
+        description = String(b.description ?? "").trim(),
+        category = String(b.category ?? "Outros"),
+        date = String(b.purchaseDate ?? "");
+      const [purchaseResult, cardResult, installmentResult] = await Promise.all(
+        [
+          db
+            .from("card_purchases")
+            .select("id,card_id")
+            .eq("id", id)
+            .is("deleted_at", null)
+            .single(),
+          db
+            .from("credit_cards")
+            .select("id,closing_day")
+            .eq("id", cardId)
+            .is("deleted_at", null)
+            .single(),
+          db
+            .from("card_installments")
+            .select("card_id,installment_number,invoice_month,status")
+            .eq("purchase_id", id),
+        ],
+      );
+      if (
+        purchaseResult.error ||
+        !purchaseResult.data ||
+        cardResult.error ||
+        !cardResult.data
+      )
+        return Response.json(
+          { error: "Compra ou cartão não encontrado." },
+          { status: 404 },
+        );
+      if (
+        !description ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+        total <= 0 ||
+        count < 1 ||
+        count > 60
+      )
+        return Response.json(
+          { error: "Preencha os dados da compra corretamente." },
+          { status: 400 },
+        );
+      if (installmentResult.error) throw installmentResult.error;
+      const oldParts = installmentResult.data ?? [],
+        paidNumbers = new Set(
+          oldParts
+            .filter((part) => part.status === "paid")
+            .map((part) => Number(part.installment_number)),
+        ),
+        base = Math.floor(total / count),
+        remainder = total - base * count,
+        first = firstMonth(date, cardResult.data.closing_day),
+        now = new Date().toISOString(),
+        values = Array.from({ length: count }, (_, index) => {
+          const number = index + 1,
+            paid = paidNumbers.has(number);
+          return {
+            purchase_id: id,
+            card_id: cardId,
+            installment_number: number,
+            amount_cents: base + (index === count - 1 ? remainder : 0),
+            invoice_month: addMonths(first, index),
+            status: paid ? "paid" : "pending",
+            paid_at: paid ? now : null,
+          };
+        });
+      const updated = await db
+        .from("card_purchases")
+        .update({
+          card_id: cardId,
+          description,
+          category,
+          purchase_date: date,
+          total_cents: total,
+          installment_count: count,
+        })
+        .eq("id", id);
+      if (updated.error) throw updated.error;
+      const upserted = await db
+        .from("card_installments")
+        .upsert(values, { onConflict: "purchase_id,installment_number" });
+      if (upserted.error) throw upserted.error;
+      const extraParts = await db
+        .from("card_installments")
+        .delete()
+        .eq("purchase_id", id)
+        .gt("installment_number", count);
+      if (extraParts.error) throw extraParts.error;
+      const affected = new Map<string, { cardId: number; month: string }>();
+      for (const part of oldParts)
+        affected.set(`${part.card_id}:${part.invoice_month}`, {
+          cardId: Number(part.card_id),
+          month: String(part.invoice_month),
+        });
+      for (const part of values)
+        affected.set(`${part.card_id}:${part.invoice_month}`, {
+          cardId: part.card_id,
+          month: part.invoice_month,
+        });
+      for (const item of affected.values())
+        await reconcileInvoiceMonth(db, item.cardId, item.month);
+      return Response.json({ updated: true });
     }
     if (b.action !== "pay_invoice")
       return Response.json({ error: "Ação inválida." }, { status: 400 });

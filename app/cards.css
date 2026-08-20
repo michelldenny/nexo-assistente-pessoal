@@ -224,7 +224,7 @@
 }
 .purchase-list article {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto 30px;
+  grid-template-columns: minmax(0, 1fr) 30px;
   align-items: center;
   gap: 10px;
   min-height: 62px;
@@ -239,6 +239,25 @@
 .purchase-list article:hover {
   border-color: #cfddd4;
   background: #fbfdfb;
+}
+.purchase-edit {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.purchase-edit:focus-visible {
+  outline: 3px solid #2f866d35;
+  outline-offset: 3px;
+  border-radius: 8px;
 }
 .purchase-icon {
   width: 32px;
@@ -679,9 +698,13 @@
     padding: 20px;
   }
   .purchase-list article {
-    grid-template-columns: 30px minmax(0, 1fr) auto 28px;
+    grid-template-columns: minmax(0, 1fr) 28px;
     gap: 8px;
     padding: 8px;
+  }
+  .purchase-edit {
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    gap: 8px;
   }
   .cards-chart {
     padding: 18px 12px;

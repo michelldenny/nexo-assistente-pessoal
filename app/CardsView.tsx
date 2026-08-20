@@ -142,6 +142,7 @@ export default function CardsView({
     [purchaseToDelete, setPurchaseToDelete] = useState<Purchase | null>(null),
     [cardToDelete, setCardToDelete] = useState<Card | null>(null),
     [editingCardId, setEditingCardId] = useState<number | null>(null),
+    [editingPurchaseId, setEditingPurchaseId] = useState<number | null>(null),
     [loading, setLoading] = useState(true),
     [saving, setSaving] = useState(false);
   const [debtSort, setDebtSort] = useState<DebtSort>("newest");
@@ -245,6 +246,32 @@ export default function CardsView({
     setPurchaseSort({ field: "date", direction: "desc" });
     setSelectedCard(item);
   }
+  function openNewPurchase(cardId?: number) {
+    setEditingPurchaseId(null);
+    setPurchase({
+      ...emptyPurchase,
+      cardId: cardId ? String(cardId) : "",
+    });
+    setPurchaseModal(true);
+  }
+  function openEditPurchase(item: Purchase) {
+    setEditingPurchaseId(item.id);
+    setPurchase({
+      cardId: String(item.cardId),
+      description: item.description,
+      category: item.category,
+      purchaseDate: item.purchaseDate,
+      total: formatMoneyInput(String(item.totalCents)),
+      installmentCount: String(item.installmentCount),
+      valueMode: "total",
+    });
+    setPurchaseModal(true);
+  }
+  function closePurchaseModal() {
+    setPurchaseModal(false);
+    setEditingPurchaseId(null);
+    setPurchase(emptyPurchase);
+  }
   function togglePurchaseSort(field: PurchaseSort["field"]) {
     setPurchaseSort((current) => ({
       field,
@@ -306,7 +333,7 @@ export default function CardsView({
     await load();
     onNotice("Cartão e todos os dados vinculados foram excluídos.");
   }
-  async function createPurchase() {
+  async function savePurchase() {
     setSaving(true);
     try {
       const enteredCents = parseMoneyInput(purchase.total),
@@ -316,10 +343,11 @@ export default function CardsView({
             ? enteredCents * installmentCount
             : enteredCents,
         r = await fetch("/api/cards", {
-          method: "POST",
+          method: editingPurchaseId ? "PATCH" : "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            action: "create_purchase",
+            action: editingPurchaseId ? "update_purchase" : "create_purchase",
+            purchaseId: editingPurchaseId,
             ...purchase,
             cardId: Number(purchase.cardId),
             totalCents,
@@ -328,13 +356,14 @@ export default function CardsView({
         }),
         b = await r.json();
       if (!r.ok) throw new Error(b.error);
-      setPurchaseModal(false);
-      setPurchase(emptyPurchase);
+      closePurchaseModal();
       await load();
       onNotice(
-        Number(purchase.installmentCount) > 1
-          ? "Compra adicionada às Dívidas."
-          : "Compra adicionada à fatura.",
+        editingPurchaseId
+          ? "Compra, parcelas e faturas atualizadas."
+          : Number(purchase.installmentCount) > 1
+            ? "Compra adicionada às Dívidas."
+            : "Compra adicionada à fatura.",
       );
     } catch (e) {
       onNotice(e instanceof Error ? e.message : "Não foi possível salvar.");
@@ -357,14 +386,15 @@ export default function CardsView({
     return (
       <div className="modal-backdrop">
         <div className="modal">
-          <button
-            className="modal-close"
-            onClick={() => setPurchaseModal(false)}
-          >
+          <button className="modal-close" onClick={closePurchaseModal}>
             ×
           </button>
-          <p className="eyebrow">NOVA COMPRA</p>
-          <h2>Adicionar à fatura</h2>
+          <p className="eyebrow">
+            {editingPurchaseId ? "EDITAR COMPRA" : "NOVA COMPRA"}
+          </p>
+          <h2>
+            {editingPurchaseId ? "Editar transação" : "Adicionar à fatura"}
+          </h2>
           <label>
             Cartão
             <select
@@ -473,9 +503,13 @@ export default function CardsView({
           <button
             className="primary wide"
             disabled={saving}
-            onClick={() => void createPurchase()}
+            onClick={() => void savePurchase()}
           >
-            Adicionar compra
+            {saving
+              ? "Salvando…"
+              : editingPurchaseId
+                ? "Salvar alterações"
+                : "Adicionar compra"}
           </button>
         </div>
       </div>
@@ -500,7 +534,7 @@ export default function CardsView({
           <button
             className="primary"
             disabled={!data.cards.length}
-            onClick={() => setPurchaseModal(true)}
+            onClick={() => openNewPurchase()}
           >
             ＋ Nova compra
           </button>
@@ -649,7 +683,7 @@ export default function CardsView({
           <button
             className="primary"
             disabled={!data.cards.length}
-            onClick={() => setPurchaseModal(true)}
+            onClick={() => openNewPurchase()}
           >
             ＋ Nova compra
           </button>
@@ -944,36 +978,44 @@ export default function CardsView({
               {selectedCardPurchases.map((p) => {
                 return (
                   <article key={p.id} className="purchase-item">
-                    <span
-                      className="purchase-icon"
-                      aria-hidden="true"
-                      style={{
-                        backgroundColor: `${CATEGORY_COLORS[p.category] || CATEGORY_COLORS.Outros}16`,
-                      }}
+                    <button
+                      className="purchase-edit"
+                      onClick={() => openEditPurchase(p)}
+                      aria-label={`Editar ${p.description}`}
                     >
-                      {CATEGORY_ICONS[p.category] || CATEGORY_ICONS.Outros}
-                    </span>
-                    <div className="purchase-info">
-                      <strong>{p.description}</strong>
-                      <div>
-                        <time dateTime={p.purchaseDate}>
-                          {new Date(
-                            p.purchaseDate + "T12:00:00Z",
-                          ).toLocaleDateString("pt-BR", {
-                            day: "2-digit",
-                            month: "2-digit",
-                            timeZone: "UTC",
-                          })}
-                        </time>
-                        <span className="purchase-category">{p.category}</span>
-                        <span className="purchase-installment">
-                          ({p.currentInstallmentNumber}/{p.installmentCount})
-                        </span>
+                      <span
+                        className="purchase-icon"
+                        aria-hidden="true"
+                        style={{
+                          backgroundColor: `${CATEGORY_COLORS[p.category] || CATEGORY_COLORS.Outros}16`,
+                        }}
+                      >
+                        {CATEGORY_ICONS[p.category] || CATEGORY_ICONS.Outros}
+                      </span>
+                      <div className="purchase-info">
+                        <strong>{p.description}</strong>
+                        <div>
+                          <time dateTime={p.purchaseDate}>
+                            {new Date(
+                              p.purchaseDate + "T12:00:00Z",
+                            ).toLocaleDateString("pt-BR", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              timeZone: "UTC",
+                            })}
+                          </time>
+                          <span className="purchase-category">
+                            {p.category}
+                          </span>
+                          <span className="purchase-installment">
+                            ({p.currentInstallmentNumber}/{p.installmentCount})
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                    <b className="purchase-amount">
-                      {money(p.installmentCents)}
-                    </b>
+                      <b className="purchase-amount">
+                        {money(p.installmentCents)}
+                      </b>
+                    </button>
                     <button
                       className="purchase-delete"
                       onClick={() => setPurchaseToDelete(p)}
