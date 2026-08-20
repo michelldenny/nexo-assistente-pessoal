@@ -81,10 +81,18 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [agendaDraft, setAgendaDraft] = useState<EventDraft | null>(null);
   const [month, setMonth] = useState(today().slice(0, 7));
+  const [insights, setInsights] = useState<string[]>([]);
 
   useEffect(() => {
     void loadEntries();
+    void loadInsights();
   }, [month]);
+  async function loadInsights() {
+    const response = await fetch(`/api/insights?month=${month}`, {
+      cache: "no-store",
+    });
+    if (response.ok) setInsights((await response.json()).messages ?? []);
+  }
   async function loadEntries() {
     try {
       const response = await fetch(`/api/transactions?month=${month}`, {
@@ -234,6 +242,11 @@ export default function Home() {
         setDraft({ ...emptyDraft(), ...body.draft });
         setEditingId(null);
         setModalOpen(true);
+      }
+      if (body.type === "purchase_created") {
+        await loadEntries();
+        await loadInsights();
+        setNotice("Compra adicionada ao cartão e à fatura correspondente.");
       }
       if (body.type === "event_draft") {
         setAgendaDraft(body.draft);
@@ -443,17 +456,20 @@ export default function Home() {
                         </button>
                         <div className="row-actions">
                           <button
+                            className="icon-action"
                             onClick={() => openEdit(entry)}
                             aria-label={`Editar ${entry.description}`}
+                            title="Editar"
                           >
-                            Editar
+                            ✎
                           </button>
                           <button
-                            className="danger"
+                            className="danger icon-action"
                             onClick={() => void removeEntry(entry)}
                             aria-label={`Excluir ${entry.description}`}
+                            title="Excluir"
                           >
-                            Excluir
+                            🗑
                           </button>
                         </div>
                       </div>
@@ -476,6 +492,17 @@ export default function Home() {
               <div className="conversation">
                 <p className="assistant-label">NEXO · AGORA</p>
                 <div className="bubble">{reply}</div>
+                <div
+                  className="insight-list"
+                  aria-label="Análises do assistente"
+                >
+                  {insights.map((insight) => (
+                    <div className="insight-bubble" key={insight}>
+                      <span>✦</span>
+                      <p>{insight}</p>
+                    </div>
+                  ))}
+                </div>
                 <div className="suggestions">
                   <button
                     onClick={() => void sendMessage("O que tenho na agenda?")}
