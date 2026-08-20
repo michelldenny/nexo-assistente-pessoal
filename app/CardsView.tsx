@@ -82,6 +82,12 @@ const emptyPurchase = {
   installmentCount: "1",
   valueMode: "total" as "total" | "installment",
 };
+const emptyPurchaseFilters = {
+  startDate: "",
+  endDate: "",
+  minValue: "",
+  maxValue: "",
+};
 export default function CardsView({
   mode,
   onNotice,
@@ -108,6 +114,7 @@ export default function CardsView({
     [loading, setLoading] = useState(true),
     [saving, setSaving] = useState(false);
   const [debtSort, setDebtSort] = useState<DebtSort>("newest");
+  const [purchaseFilters, setPurchaseFilters] = useState(emptyPurchaseFilters);
   const [card, setCard] = useState(emptyCard),
     [purchase, setPurchase] = useState(emptyPurchase);
   const cardMap = useMemo(
@@ -142,6 +149,28 @@ export default function CardsView({
       }
     });
   }, [data.debts, debtSort]);
+  const selectedCardPurchases = useMemo(() => {
+    if (!selectedCard) return [];
+    const minCents = purchaseFilters.minValue
+        ? parseMoneyInput(purchaseFilters.minValue)
+        : 0,
+      maxCents = purchaseFilters.maxValue
+        ? parseMoneyInput(purchaseFilters.maxValue)
+        : Number.POSITIVE_INFINITY;
+    return data.purchases
+      .filter((item) => item.cardId === selectedCard.id)
+      .filter(
+        (item) =>
+          (!purchaseFilters.startDate ||
+            item.purchaseDate >= purchaseFilters.startDate) &&
+          (!purchaseFilters.endDate ||
+            item.purchaseDate <= purchaseFilters.endDate) &&
+          item.totalCents >= minCents &&
+          item.totalCents <= maxCents,
+      )
+      .sort((a, b) => b.purchaseDate.localeCompare(a.purchaseDate));
+  }, [data.purchases, purchaseFilters, selectedCard]);
+  const hasPurchaseFilters = Object.values(purchaseFilters).some(Boolean);
   async function load() {
     try {
       const r = await fetch("/api/cards", { cache: "no-store" }),
@@ -161,6 +190,10 @@ export default function CardsView({
     setEditingCardId(null);
     setCard(emptyCard);
     setCardModal(true);
+  }
+  function openCardPurchases(item: Card) {
+    setPurchaseFilters(emptyPurchaseFilters);
+    setSelectedCard(item);
   }
   function openEditCard(item: Card) {
     setEditingCardId(item.id);
@@ -591,10 +624,10 @@ export default function CardsView({
                 tabIndex={0}
                 className={`credit-card ${c.color}`}
                 key={c.id}
-                onClick={() => setSelectedCard(c)}
+                onClick={() => openCardPurchases(c)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ")
-                    setSelectedCard(c);
+                    openCardPurchases(c);
                 }}
               >
                 <div className="card-actions">
@@ -818,53 +851,148 @@ export default function CardsView({
               {selectedCard.bank} · •••• {selectedCard.lastFour}
             </p>
             <h2>Compras de {selectedCard.name}</h2>
+            <section
+              className="purchase-filters"
+              aria-label="Filtros das compras"
+            >
+              <div className="purchase-filter-head">
+                <strong>Filtrar transações</strong>
+                {hasPurchaseFilters && (
+                  <button
+                    onClick={() => setPurchaseFilters(emptyPurchaseFilters)}
+                  >
+                    Limpar filtros
+                  </button>
+                )}
+              </div>
+              <div className="purchase-filter-grid">
+                <label>
+                  Data inicial
+                  <input
+                    type="date"
+                    value={purchaseFilters.startDate}
+                    max={purchaseFilters.endDate || undefined}
+                    onChange={(event) =>
+                      setPurchaseFilters((current) => ({
+                        ...current,
+                        startDate: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label>
+                  Data final
+                  <input
+                    type="date"
+                    value={purchaseFilters.endDate}
+                    min={purchaseFilters.startDate || undefined}
+                    onChange={(event) =>
+                      setPurchaseFilters((current) => ({
+                        ...current,
+                        endDate: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label>
+                  Valor mínimo
+                  <input
+                    inputMode="numeric"
+                    placeholder="0,00"
+                    value={purchaseFilters.minValue}
+                    onChange={(event) =>
+                      setPurchaseFilters((current) => ({
+                        ...current,
+                        minValue: event.target.value
+                          ? formatMoneyInput(event.target.value)
+                          : "",
+                      }))
+                    }
+                  />
+                </label>
+                <label>
+                  Valor máximo
+                  <input
+                    inputMode="numeric"
+                    placeholder="0,00"
+                    value={purchaseFilters.maxValue}
+                    onChange={(event) =>
+                      setPurchaseFilters((current) => ({
+                        ...current,
+                        maxValue: event.target.value
+                          ? formatMoneyInput(event.target.value)
+                          : "",
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+              <small className="purchase-filter-count">
+                {selectedCardPurchases.length} de{" "}
+                {
+                  data.purchases.filter(
+                    (item) => item.cardId === selectedCard.id,
+                  ).length
+                }{" "}
+                transações
+              </small>
+            </section>
             <div className="purchase-list">
-              {data.purchases
-                .filter((p) => p.cardId === selectedCard.id)
-                .sort((a, b) => b.purchaseDate.localeCompare(a.purchaseDate))
-                .map((p) => {
-                  const isInstallment = p.installmentCount > 1;
-                  const installmentValue = isInstallment
-                    ? Math.round(p.totalCents / p.installmentCount)
-                    : p.totalCents;
-                  return (
-                    <article key={p.id} className="purchase-item">
-                      <div className="purchase-item-info">
-                        <strong>{p.description}</strong>
-                        <small>
-                          {p.category} ·{" "}
-                          {new Date(
-                            p.purchaseDate + "T12:00:00Z",
-                          ).toLocaleDateString("pt-BR", { timeZone: "UTC" })}
-                        </small>
-                      </div>
-                      <span className="purchase-badge">
+              {selectedCardPurchases.map((p) => {
+                const isInstallment = p.installmentCount > 1;
+                const installmentValue = isInstallment
+                  ? Math.round(p.totalCents / p.installmentCount)
+                  : p.totalCents;
+                return (
+                  <article key={p.id} className="purchase-item">
+                    <div className="purchase-item-info">
+                      <strong>{p.description}</strong>
+                      <small>
+                        {p.category} ·{" "}
+                        {new Date(
+                          p.purchaseDate + "T12:00:00Z",
+                        ).toLocaleDateString("pt-BR", { timeZone: "UTC" })}
+                      </small>
+                    </div>
+                    <span className="purchase-badge">
+                      {isInstallment
+                        ? `${p.installmentCount}x parcelas`
+                        : "À vista"}
+                    </span>
+                    <div className="purchase-amount-col">
+                      <b>{money(installmentValue)}</b>
+                      <small>
                         {isInstallment
-                          ? `${p.installmentCount}x parcelas`
-                          : "À vista"}
-                      </span>
-                      <div className="purchase-amount-col">
-                        <b>{money(installmentValue)}</b>
-                        <small>
-                          {isInstallment
-                            ? `valor da parcela (Total: ${money(p.totalCents)})`
-                            : "valor total"}
-                        </small>
-                      </div>
-                      <button
-                        className="purchase-delete"
-                        onClick={() => setPurchaseToDelete(p)}
-                        aria-label={`Excluir ${p.description}`}
-                        title="Excluir compra"
-                      >
-                        🗑
-                      </button>
-                    </article>
-                  );
-                })}
-              {!data.purchases.some((p) => p.cardId === selectedCard.id) && (
+                          ? `valor da parcela (Total: ${money(p.totalCents)})`
+                          : "valor total"}
+                      </small>
+                    </div>
+                    <button
+                      className="purchase-delete"
+                      onClick={() => setPurchaseToDelete(p)}
+                      aria-label={`Excluir ${p.description}`}
+                      title="Excluir compra"
+                    >
+                      🗑
+                    </button>
+                  </article>
+                );
+              })}
+              {!selectedCardPurchases.length && (
                 <div className="agenda-empty">
-                  <strong>Nenhuma compra neste cartão.</strong>
+                  <strong>
+                    {hasPurchaseFilters
+                      ? "Nenhuma transação encontrada com esses filtros."
+                      : "Nenhuma compra neste cartão."}
+                  </strong>
+                  {hasPurchaseFilters && (
+                    <button
+                      className="link-button"
+                      onClick={() => setPurchaseFilters(emptyPurchaseFilters)}
+                    >
+                      Limpar filtros
+                    </button>
+                  )}
                 </div>
               )}
             </div>
