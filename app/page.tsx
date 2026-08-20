@@ -9,6 +9,7 @@ import {
 } from "./categories";
 import CardsView from "./CardsView";
 import ConfirmDialog from "./ConfirmDialog";
+import ImportBackupModal from "./ImportBackupModal";
 import { formatMoneyInput, formatMonth, parseMoneyInput } from "./ui-format";
 
 type Entry = {
@@ -86,6 +87,7 @@ export default function Home() {
   const [insights, setInsights] = useState<string[]>([]);
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [attachmentBusy, setAttachmentBusy] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -455,6 +457,14 @@ export default function Home() {
                   ›
                 </button>
               </div>
+              {tab === "Financeiro" && (
+                <button
+                  className="secondary import-trigger"
+                  onClick={() => setImportOpen(true)}
+                >
+                  <span>⇧</span> Importar backup
+                </button>
+              )}
               {tab !== "Agenda" && tab !== "Cartões" && (
                 <button
                   className="primary"
@@ -973,6 +983,15 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      <ImportBackupModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onNotice={setNotice}
+        onImported={async () => {
+          await Promise.all([loadEntries(), loadInsights()]);
+        }}
+      />
 
       {/* Barra de navegação inferior fixa para dispositivos móveis */}
       <nav className="mobile-bottom-nav" aria-label="Navegação móvel">
