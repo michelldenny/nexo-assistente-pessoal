@@ -86,6 +86,8 @@ export default function CardsView({
     [purchaseModal, setPurchaseModal] = useState(false),
     [selectedCard, setSelectedCard] = useState<Card | null>(null),
     [purchaseToDelete, setPurchaseToDelete] = useState<Purchase | null>(null),
+    [cardToDelete, setCardToDelete] = useState<Card | null>(null),
+    [editingCardId, setEditingCardId] = useState<number | null>(null),
     [loading, setLoading] = useState(true),
     [saving, setSaving] = useState(false);
   const [card, setCard] = useState(emptyCard),
@@ -109,15 +111,34 @@ export default function CardsView({
   useEffect(() => {
     void load();
   }, []);
-  async function createCard() {
+  function openNewCard() {
+    setEditingCardId(null);
+    setCard(emptyCard);
+    setCardModal(true);
+  }
+  function openEditCard(item: Card) {
+    setEditingCardId(item.id);
+    setCard({
+      name: item.name,
+      bank: item.bank,
+      lastFour: item.lastFour,
+      creditLimit: formatMoneyInput(String(item.creditLimitCents)),
+      closingDay: String(item.closingDay),
+      dueDay: String(item.dueDay),
+      color: item.color,
+    });
+    setCardModal(true);
+  }
+  async function saveCard() {
     setSaving(true);
     try {
       const creditLimitCents = parseMoneyInput(card.creditLimit),
         r = await fetch("/api/cards", {
-          method: "POST",
+          method: editingCardId ? "PATCH" : "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            action: "create_card",
+            action: editingCardId ? "update_card" : "create_card",
+            cardId: editingCardId,
             ...card,
             creditLimitCents,
           }),
@@ -127,12 +148,25 @@ export default function CardsView({
       setCardModal(false);
       setCard(emptyCard);
       await load();
-      onNotice("Cartão cadastrado.");
+      setEditingCardId(null);
+      onNotice(editingCardId ? "Cartão atualizado." : "Cartão cadastrado.");
     } catch (e) {
       onNotice(e instanceof Error ? e.message : "Não foi possível salvar.");
     } finally {
       setSaving(false);
     }
+  }
+  async function removeCard(item: Card) {
+    const response = await fetch(`/api/cards?cardId=${item.id}`, {
+      method: "DELETE",
+    });
+    const body = await response.json();
+    if (!response.ok)
+      return onNotice(body.error || "Não foi possível excluir o cartão.");
+    setSelectedCard(null);
+    setCardToDelete(null);
+    await load();
+    onNotice("Cartão e todos os dados vinculados foram excluídos.");
   }
   async function createPurchase() {
     setSaving(true);
@@ -408,9 +442,7 @@ export default function CardsView({
           <h2>Cartões e Faturas</h2>
         </div>
         <div className="agenda-tools">
-          <button onClick={() => setCardModal(true)}>
-            ＋ Cadastrar cartão
-          </button>
+          <button onClick={openNewCard}>＋ Cadastrar cartão</button>
           <button
             className="primary"
             disabled={!data.cards.length}
@@ -424,7 +456,7 @@ export default function CardsView({
         <div className="agenda-empty">
           <strong>Cadastre seu primeiro cartão.</strong>
           <small>Informe limite, fechamento e vencimento.</small>
-          <button onClick={() => setCardModal(true)}>Cadastrar cartão</button>
+          <button onClick={openNewCard}>Cadastrar cartão</button>
         </div>
       ) : (
         <div className="cards-grid">
@@ -443,12 +475,40 @@ export default function CardsView({
                 Math.round((used / c.creditLimitCents) * 100),
               );
             return (
-              <button
-                type="button"
+              <article
+                role="button"
+                tabIndex={0}
                 className={`credit-card ${c.color}`}
                 key={c.id}
                 onClick={() => setSelectedCard(c)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ")
+                    setSelectedCard(c);
+                }}
               >
+                <div className="card-actions">
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openEditCard(c);
+                    }}
+                    aria-label={`Editar cartão ${c.name}`}
+                    title="Editar cartão"
+                  >
+                    ✎
+                  </button>
+                  <button
+                    className="danger"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setCardToDelete(c);
+                    }}
+                    aria-label={`Excluir cartão ${c.name}`}
+                    title="Excluir cartão"
+                  >
+                    🗑
+                  </button>
+                </div>
                 <div className="card-top">
                   <span>
                     <small>{c.bank}</small>
@@ -478,7 +538,7 @@ export default function CardsView({
                   </span>
                 </div>
                 <small className="card-hint">Clique para ver as compras</small>
-              </button>
+              </article>
             );
           })}
         </div>
@@ -521,8 +581,10 @@ export default function CardsView({
             <button className="modal-close" onClick={() => setCardModal(false)}>
               ×
             </button>
-            <p className="eyebrow">NOVO CARTÃO</p>
-            <h2>Dados do cartão</h2>
+            <p className="eyebrow">
+              {editingCardId ? "EDITAR CARTÃO" : "NOVO CARTÃO"}
+            </p>
+            <h2>{editingCardId ? "Atualize o cartão" : "Dados do cartão"}</h2>
             <label>
               Apelido
               <input
@@ -591,9 +653,13 @@ export default function CardsView({
             <button
               className="primary wide"
               disabled={saving}
-              onClick={() => void createCard()}
+              onClick={() => void saveCard()}
             >
-              Cadastrar cartão
+              {saving
+                ? "Salvando…"
+                : editingCardId
+                  ? "Salvar alterações"
+                  : "Cadastrar cartão"}
             </button>
           </div>
         </div>
@@ -672,6 +738,19 @@ export default function CardsView({
         onConfirm={() =>
           purchaseToDelete && void removePurchase(purchaseToDelete)
         }
+      />
+      <ConfirmDialog
+        open={Boolean(cardToDelete)}
+        title="Excluir cartão?"
+        message={
+          cardToDelete
+            ? `O cartão “${cardToDelete.name}” será excluído junto com todas as compras, parcelas, faturas, dívidas e lançamentos vinculados. Esta ação não pode ser desfeita.`
+            : ""
+        }
+        confirmLabel="Excluir tudo"
+        danger
+        onCancel={() => setCardToDelete(null)}
+        onConfirm={() => cardToDelete && void removeCard(cardToDelete)}
       />
     </>
   );
