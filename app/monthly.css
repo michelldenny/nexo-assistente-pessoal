@@ -223,3 +223,51 @@
   background: #b84c40;
   color: #fff;
 }
+.file-input {
+  display: none;
+}
+.composer.has-attachment {
+  border-color: #9bbdad;
+  background: #fbfdfb;
+}
+.attachment-chip {
+  display: grid;
+  grid-template-columns: 34px 1fr auto;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 10px;
+  padding: 9px;
+  border: 1px solid #dce8e0;
+  border-radius: 10px;
+  background: #f1f7f3;
+}
+.attachment-chip > span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--green);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+}
+.attachment-chip > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.attachment-chip strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+.attachment-chip small {
+  color: var(--muted);
+  font-size: 8px;
+}
+.attachment-chip button {
+  font-size: 18px;
+  color: #7f8b84;
+}

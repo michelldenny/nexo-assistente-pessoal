@@ -5,6 +5,7 @@ import { createCardPurchase } from "../../../db/card-purchases";
 
 type Part = {
   text?: string;
+  inlineData?: { mimeType: string; data: string };
   functionCall?: { name: string; args: Record<string, unknown> };
   functionResponse?: { name: string; response: Record<string, unknown> };
 };
@@ -130,7 +131,7 @@ async function callGemini(contents: Content[]) {
         systemInstruction: {
           parts: [
             {
-              text: `Você é o Nexo, assistente pessoal financeiro e de agenda. Responda em português do Brasil, de forma curta. Hoje em São Paulo é ${today()}. Use as ferramentas para preparar registros ou consultar dados. Nunca diga que salvou algo apenas preparado.`,
+              text: `Você é o Nexo, assistente pessoal financeiro e de agenda. Responda em português do Brasil, de forma curta. Hoje em São Paulo é ${today()}. Leia imagens, PDFs, textos e planilhas anexados, extraindo valores, datas, estabelecimentos, cartões e parcelas. Use as ferramentas para preparar registros ou consultar dados. Se o usuário pedir apenas para ler ou analisar um anexo, responda com a análise sem cadastrar nada. Só salve uma compra de cartão quando ele pedir explicitamente para registrar. Nunca diga que salvou algo apenas preparado.`,
             },
           ],
         },
@@ -155,13 +156,51 @@ const textOf = (body: GeminiResponse) =>
 
 export async function POST(request: Request) {
   try {
-    const { message } = (await request.json()) as { message?: string };
-    if (!message?.trim() || message.length > 600)
+    const { message, attachment } = (await request.json()) as {
+      message?: string;
+      attachment?: { name?: string; mimeType?: string; data?: string };
+    };
+    const allowed = new Set([
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/heic",
+      "image/heif",
+      "application/pdf",
+      "text/plain",
+      "text/csv",
+      "application/csv",
+    ]);
+    const hasAttachment = Boolean(
+      attachment?.data &&
+      attachment?.mimeType &&
+      allowed.has(attachment.mimeType),
+    );
+    if ((!message?.trim() && !hasAttachment) || (message?.length ?? 0) > 600)
       return Response.json(
-        { error: "Envie uma mensagem válida." },
+        { error: "Envie uma mensagem ou um arquivo válido." },
         { status: 400 },
       );
-    const user: Content = { role: "user", parts: [{ text: message.trim() }] };
+    if (attachment?.data && attachment.data.length > 4_700_000)
+      return Response.json(
+        { error: "O arquivo é maior que o limite de 3,5 MB." },
+        { status: 413 },
+      );
+    const parts: Part[] = [
+      {
+        text:
+          message?.trim() ||
+          `Analise o arquivo ${attachment?.name ?? "anexado"}. Identifique os dados financeiros, datas, estabelecimento, cartão e parcelas quando existirem.`,
+      },
+    ];
+    if (hasAttachment)
+      parts.push({
+        inlineData: {
+          mimeType: attachment!.mimeType!,
+          data: attachment!.data!,
+        },
+      });
+    const user: Content = { role: "user", parts };
     const first = await callGemini([user]);
     const model = contentOf(first);
     const call = model?.parts?.find((part) => part.functionCall)?.functionCall;

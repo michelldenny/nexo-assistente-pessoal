@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AgendaView, { type EventDraft } from "./AgendaView";
 import {
   CATEGORY_COLORS,
@@ -34,6 +34,7 @@ type Draft = {
   recurrenceDay: string;
   recurrenceEndMonth: string;
 };
+type Attachment = { name: string; mimeType: string; data: string };
 const today = () =>
   new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
 const emptyDraft = (): Draft => ({
@@ -82,6 +83,9 @@ export default function Home() {
   const [month, setMonth] = useState(today().slice(0, 7));
   const [entryToDelete, setEntryToDelete] = useState<Entry | null>(null);
   const [insights, setInsights] = useState<string[]>([]);
+  const [attachment, setAttachment] = useState<Attachment | null>(null);
+  const [attachmentBusy, setAttachmentBusy] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     void loadEntries();
@@ -224,18 +228,19 @@ export default function Home() {
 
   async function sendMessage(text = message) {
     const cleaned = text.trim();
-    if (!cleaned) return;
+    if (!cleaned && !attachment) return;
     setMessage("");
     setReply("Pensando…");
     try {
       const response = await fetch("/api/assistant", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: cleaned }),
+        body: JSON.stringify({ message: cleaned, attachment }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error);
       setReply(body.message);
+      setAttachment(null);
       if (body.type === "transaction_draft") {
         setDraft({ ...emptyDraft(), ...body.draft });
         setEditingId(null);
@@ -256,6 +261,46 @@ export default function Home() {
           ? `Não consegui responder: ${error.message}`
           : "Não consegui responder agora.",
       );
+    }
+  }
+
+  async function attachFile(file?: File) {
+    if (!file) return;
+    const allowed = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/heic",
+      "image/heif",
+      "application/pdf",
+      "text/plain",
+      "text/csv",
+      "application/csv",
+    ];
+    if (!allowed.includes(file.type))
+      return setNotice("Use uma imagem, PDF, TXT ou CSV.");
+    if (file.size > 3_500_000)
+      return setNotice("O arquivo deve ter no máximo 3,5 MB.");
+    setAttachmentBusy(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () =>
+          reject(new Error("Não foi possível ler o arquivo."));
+        reader.readAsDataURL(file);
+      });
+      setAttachment({
+        name: file.name,
+        mimeType: file.type,
+        data: dataUrl.split(",")[1],
+      });
+    } catch (error) {
+      setNotice(
+        error instanceof Error ? error.message : "Não foi possível anexar.",
+      );
+    } finally {
+      setAttachmentBusy(false);
     }
   }
 
@@ -517,7 +562,35 @@ export default function Home() {
                   </button>
                 </div>
               </div>
-              <div className="composer">
+              <div
+                className={`composer ${attachment ? "has-attachment" : ""}`}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  void attachFile(event.dataTransfer.files[0]);
+                }}
+              >
+                {attachment && (
+                  <div className="attachment-chip">
+                    <span>
+                      {attachment.mimeType.startsWith("image/")
+                        ? "▧"
+                        : attachment.mimeType === "application/pdf"
+                          ? "PDF"
+                          : "TXT"}
+                    </span>
+                    <div>
+                      <strong>{attachment.name}</strong>
+                      <small>Pronto para analisar</small>
+                    </div>
+                    <button
+                      onClick={() => setAttachment(null)}
+                      aria-label="Remover anexo"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
                 <textarea
                   aria-label="Mensagem para o assistente"
                   placeholder="Fale com o Nexo..."
@@ -531,7 +604,24 @@ export default function Home() {
                   }}
                 />
                 <div>
-                  <button aria-label="Anexar arquivo">＋</button>
+                  <input
+                    ref={fileInputRef}
+                    className="file-input"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,text/plain,text/csv,.csv,.txt,.pdf"
+                    onChange={(event) => {
+                      void attachFile(event.target.files?.[0]);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    aria-label="Anexar arquivo"
+                    title="Anexar imagem, PDF, TXT ou CSV"
+                    disabled={attachmentBusy}
+                  >
+                    {attachmentBusy ? "…" : "＋"}
+                  </button>
                   <span>Enter para enviar</span>
                   <button
                     className="send"
