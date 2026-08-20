@@ -62,6 +62,21 @@
 .credit-card.lime {
   background: linear-gradient(135deg, #3d552a, #7fa64e);
 }
+.credit-card.orange {
+  background: linear-gradient(135deg, #8f451f, #f08b3e);
+}
+.credit-card.sky {
+  background: linear-gradient(135deg, #276b8f, #70b9d9);
+}
+.credit-card.navy {
+  background: linear-gradient(135deg, #142c4a, #315e91);
+}
+.credit-card.red {
+  background: linear-gradient(135deg, #701f2d, #c64b55);
+}
+.credit-card.black {
+  background: linear-gradient(135deg, #111827, #374151);
+}
 .credit-card h3 {
   font-size: 23px;
   margin: 4px 0;
@@ -610,7 +625,7 @@
 }
 .card-color-picker > div {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 7px;
 }
 .card-color-picker button {
@@ -645,6 +660,21 @@
 }
 .card-color-picker .lime i {
   background: linear-gradient(135deg, #3d552a, #7fa64e);
+}
+.card-color-picker .orange i {
+  background: linear-gradient(135deg, #8f451f, #f08b3e);
+}
+.card-color-picker .sky i {
+  background: linear-gradient(135deg, #276b8f, #70b9d9);
+}
+.card-color-picker .navy i {
+  background: linear-gradient(135deg, #142c4a, #315e91);
+}
+.card-color-picker .red i {
+  background: linear-gradient(135deg, #701f2d, #c64b55);
+}
+.card-color-picker .black i {
+  background: linear-gradient(135deg, #111827, #374151);
 }
 @media (max-width: 950px) {
   .debt-overview {

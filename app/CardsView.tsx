@@ -875,6 +875,11 @@ export default function CardsView({
                   { value: "purple", label: "Roxo" },
                   { value: "coral", label: "Coral" },
                   { value: "lime", label: "Lima" },
+                  { value: "orange", label: "Laranja" },
+                  { value: "sky", label: "Azul claro" },
+                  { value: "navy", label: "Azul escuro" },
+                  { value: "red", label: "Vermelho" },
+                  { value: "black", label: "Preto" },
                 ].map((option) => (
                   <button
                     key={option.value}
