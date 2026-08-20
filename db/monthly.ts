@@ -49,18 +49,20 @@ export async function syncMonth(month: string) {
           .reduce((s, p) => s + p.amount_cents, 0);
       return c && total
         ? {
-            kind: "expense",
+            kind: "expense" as const,
             description: `Fatura ${c.name}`,
             category: "Outros",
             amount_cents: total,
             occurred_on: `${month}-${String(c.due_day).padStart(2, "0")}`,
-            source: "manual",
-            status: i.status === "paid" ? "settled" : "pending",
+            source: "manual" as const,
+            status: (i.status === "paid" ? "settled" : "pending") as
+              | "settled"
+              | "pending",
             invoice_id: i.id,
           }
         : null;
     })
-    .filter(Boolean);
+    .filter((r): r is NonNullable<typeof r> => r !== null);
   if (rows.length) {
     const { error } = await db
       .from("transactions")

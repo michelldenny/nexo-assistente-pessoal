@@ -1,13 +1,15 @@
-import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./schema";
 
+type D1Param = Parameters<typeof drizzle>[0];
+
 export function getDb() {
-  if (!env.DB) {
-    throw new Error(
-      "Cloudflare D1 binding `DB` is unavailable. Set the `d1` field in .openai/hosting.json to `DB` or let your control plane inject the real binding values before using the database."
-    );
+  const d1 =
+    (globalThis as unknown as { env?: { DB?: D1Param } }).env?.DB ||
+    (process.env as unknown as { DB?: D1Param }).DB;
+  if (!d1) {
+    throw new Error("Cloudflare D1 binding `DB` is unavailable.");
   }
 
-  return drizzle(env.DB, { schema });
+  return drizzle(d1, { schema });
 }

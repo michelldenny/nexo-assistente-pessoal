@@ -6,6 +6,11 @@ const addMonths = (month: string, count: number) => {
 };
 const firstMonth = (date: string, closing: number) =>
   addMonths(date.slice(0, 7), Number(date.slice(8, 10)) > closing ? 1 : 0);
+type CardRow = { id: number; name: string; bank: string; lastFour: string; creditLimitCents: number; closingDay: number; dueDay: number; color: string };
+type PurchaseRow = { id: number; cardId: number; description: string; category: string; purchaseDate: string; totalCents: number; installmentCount: number };
+type InstallmentRow = { id: number; purchaseId: number; cardId: number; installmentNumber: number; amountCents: number; invoiceMonth: string; status: "pending" | "paid" };
+type InvoiceRow = { id: number; cardId: number; referenceMonth: string; status: "open" | "paid" };
+
 export async function GET() {
   try {
     const db = getSupabase(),
@@ -16,10 +21,10 @@ export async function GET() {
         db.from("card_invoices").select("*"),
       ]);
     for (const r of [ca, pu, ins, inv]) if (r.error) throw r.error;
-    const cards = (ca.data ?? []).map((r) => camel<Record<string, unknown>>(r)),
-      purchases = (pu.data ?? []).map((r) => camel<Record<string, unknown>>(r)),
-      installments = (ins.data ?? []).map((r) => camel<Record<string, unknown>>(r)),
-      invoices = (inv.data ?? []).map((r) => camel<Record<string, unknown>>(r));
+    const cards = (ca.data ?? []).map((r) => camel<CardRow>(r)),
+      purchases = (pu.data ?? []).map((r) => camel<PurchaseRow>(r)),
+      installments = (ins.data ?? []).map((r) => camel<InstallmentRow>(r)),
+      invoices = (inv.data ?? []).map((r) => camel<InvoiceRow>(r));
     const invoiceRows = invoices
       .map((i) => ({
         ...i,
@@ -27,9 +32,9 @@ export async function GET() {
           .filter(
             (x) => x.cardId === i.cardId && x.invoiceMonth === i.referenceMonth,
           )
-          .reduce((s: number, x) => s + (Number(x.amountCents) || 0), 0),
+          .reduce((s: number, x) => s + x.amountCents, 0),
       }))
-      .sort((a, b) => String(b.referenceMonth).localeCompare(String(a.referenceMonth)));
+      .sort((a, b) => b.referenceMonth.localeCompare(a.referenceMonth));
     const debts = purchases
       .filter((p) => Number(p.installmentCount) > 1)
       .map((p) => {
