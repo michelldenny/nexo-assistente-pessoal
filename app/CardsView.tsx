@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { TRANSACTION_CATEGORIES } from "./categories";
+import ConfirmDialog from "./ConfirmDialog";
+import { formatMoneyInput, formatMonth, parseMoneyInput } from "./ui-format";
 type Card = {
   id: number;
   name: string;
@@ -54,7 +56,7 @@ const emptyCard = {
   name: "",
   bank: "",
   lastFour: "",
-  creditLimit: "",
+  creditLimit: "0,00",
   closingDay: "10",
   dueDay: "17",
   color: "green",
@@ -64,7 +66,7 @@ const emptyPurchase = {
   description: "",
   category: "Outros",
   purchaseDate: today(),
-  total: "",
+  total: "0,00",
   installmentCount: "1",
 };
 export default function CardsView({
@@ -83,6 +85,7 @@ export default function CardsView({
   const [cardModal, setCardModal] = useState(false),
     [purchaseModal, setPurchaseModal] = useState(false),
     [selectedCard, setSelectedCard] = useState<Card | null>(null),
+    [purchaseToDelete, setPurchaseToDelete] = useState<Purchase | null>(null),
     [loading, setLoading] = useState(true),
     [saving, setSaving] = useState(false);
   const [card, setCard] = useState(emptyCard),
@@ -109,9 +112,7 @@ export default function CardsView({
   async function createCard() {
     setSaving(true);
     try {
-      const creditLimitCents = Math.round(
-          Number(card.creditLimit.replace(".", "").replace(",", ".")) * 100,
-        ),
+      const creditLimitCents = parseMoneyInput(card.creditLimit),
         r = await fetch("/api/cards", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -136,9 +137,7 @@ export default function CardsView({
   async function createPurchase() {
     setSaving(true);
     try {
-      const totalCents = Math.round(
-          Number(purchase.total.replace(".", "").replace(",", ".")) * 100,
-        ),
+      const totalCents = parseMoneyInput(purchase.total),
         r = await fetch("/api/cards", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -166,21 +165,7 @@ export default function CardsView({
       setSaving(false);
     }
   }
-  async function pay(i: Invoice) {
-    if (!confirm(`Marcar a fatura de ${i.referenceMonth} como paga?`)) return;
-    const r = await fetch("/api/cards", {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "pay_invoice", invoiceId: i.id }),
-    });
-    if (r.ok) {
-      await load();
-      onNotice("Fatura paga. Dívidas atualizadas automaticamente.");
-    }
-  }
   async function removePurchase(item: Purchase) {
-    if (!confirm(`Excluir “${item.description}” e todas as suas parcelas?`))
-      return;
     const response = await fetch(`/api/cards?purchaseId=${item.id}`, {
       method: "DELETE",
     });
@@ -188,6 +173,7 @@ export default function CardsView({
     if (!response.ok)
       return onNotice(body.error || "Não foi possível excluir.");
     await load();
+    setPurchaseToDelete(null);
     onNotice("Compra e parcelas excluídas. As faturas foram recalculadas.");
   }
   function purchaseForm() {
@@ -234,7 +220,10 @@ export default function CardsView({
                 inputMode="decimal"
                 value={purchase.total}
                 onChange={(e) =>
-                  setPurchase({ ...purchase, total: e.target.value })
+                  setPurchase({
+                    ...purchase,
+                    total: formatMoneyInput(e.target.value),
+                  })
                 }
               />
             </label>
@@ -468,7 +457,10 @@ export default function CardsView({
                   <p>•••• {c.lastFour}</p>
                 </div>
                 <div className="invoice-highlight">
-                  <small>Fatura atual {current?.referenceMonth ?? ""}</small>
+                  <small>
+                    Fatura atual{" "}
+                    {current ? formatMonth(current.referenceMonth) : ""}
+                  </small>
                   <strong>{money(current?.totalCents ?? 0)}</strong>
                 </div>
                 <div className="limit-progress">
@@ -513,15 +505,7 @@ export default function CardsView({
                     }}
                   />
                 </div>
-                <span>
-                  {new Intl.DateTimeFormat("pt-BR", {
-                    month: "short",
-                    year: "2-digit",
-                    timeZone: "UTC",
-                  })
-                    .format(new Date(`${chartMonth}-01T12:00:00Z`))
-                    .replace(" de ", "/")}
-                </span>
+                <span>{formatMonth(chartMonth)}</span>
               </div>
             ))}
           </div>
@@ -573,7 +557,10 @@ export default function CardsView({
                 inputMode="decimal"
                 value={card.creditLimit}
                 onChange={(e) =>
-                  setCard({ ...card, creditLimit: e.target.value })
+                  setCard({
+                    ...card,
+                    creditLimit: formatMoneyInput(e.target.value),
+                  })
                 }
               />
             </label>
@@ -653,7 +640,7 @@ export default function CardsView({
                     <b>{money(p.totalCents)}</b>
                     <button
                       className="purchase-delete"
-                      onClick={() => void removePurchase(p)}
+                      onClick={() => setPurchaseToDelete(p)}
                       aria-label={`Excluir ${p.description}`}
                       title="Excluir compra"
                     >
@@ -671,6 +658,21 @@ export default function CardsView({
         </div>
       )}
       {purchaseModal && purchaseForm()}
+      <ConfirmDialog
+        open={Boolean(purchaseToDelete)}
+        title="Excluir compra?"
+        message={
+          purchaseToDelete
+            ? `A compra “${purchaseToDelete.description}” e todas as parcelas serão removidas. As faturas serão recalculadas.`
+            : ""
+        }
+        confirmLabel="Excluir compra"
+        danger
+        onCancel={() => setPurchaseToDelete(null)}
+        onConfirm={() =>
+          purchaseToDelete && void removePurchase(purchaseToDelete)
+        }
+      />
     </>
   );
 }

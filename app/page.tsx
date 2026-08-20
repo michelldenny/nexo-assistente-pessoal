@@ -8,6 +8,8 @@ import {
   TRANSACTION_CATEGORIES,
 } from "./categories";
 import CardsView from "./CardsView";
+import ConfirmDialog from "./ConfirmDialog";
+import { formatMoneyInput, formatMonth, parseMoneyInput } from "./ui-format";
 
 type Entry = {
   id: number;
@@ -38,18 +40,13 @@ const emptyDraft = (): Draft => ({
   kind: "expense",
   description: "",
   category: "Outros",
-  amount: "",
+  amount: "0,00",
   occurredOn: today(),
   recurring: false,
   recurrenceDay: String(new Date().getDate()),
   recurrenceEndMonth: "",
 });
-const monthLabel = (month: string) =>
-  new Intl.DateTimeFormat("pt-BR", {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${month}-01T12:00:00Z`));
+const monthLabel = formatMonth;
 const moveMonth = (month: string, delta: number) => {
   const [y, m] = month.split("-").map(Number),
     d = new Date(Date.UTC(y, m - 1 + delta, 1));
@@ -64,7 +61,9 @@ const displayDate = (date: string) =>
     day: "2-digit",
     month: "short",
     timeZone: "UTC",
-  }).format(new Date(`${date}T12:00:00Z`));
+  })
+    .format(new Date(`${date}T12:00:00Z`))
+    .replace(/\s+de\s+/gi, " ");
 
 export default function Home() {
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -81,6 +80,7 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [agendaDraft, setAgendaDraft] = useState<EventDraft | null>(null);
   const [month, setMonth] = useState(today().slice(0, 7));
+  const [entryToDelete, setEntryToDelete] = useState<Entry | null>(null);
   const [insights, setInsights] = useState<string[]>([]);
 
   useEffect(() => {
@@ -142,9 +142,7 @@ export default function Home() {
   }
 
   async function saveDraft(source: "manual" | "assistant" = "manual") {
-    const amountCents = Math.round(
-      Number(draft.amount.replace(".", "").replace(",", ".")) * 100,
-    );
+    const amountCents = parseMoneyInput(draft.amount);
     if (
       !draft.description.trim() ||
       !Number.isSafeInteger(amountCents) ||
@@ -180,13 +178,13 @@ export default function Home() {
   }
 
   async function removeEntry(entry: Entry) {
-    if (!window.confirm(`Excluir “${entry.description}”?`)) return;
     const response = await fetch(`/api/transactions?id=${entry.id}`, {
       method: "DELETE",
     });
     if (response.ok) {
       setEntries((current) => current.filter((e) => e.id !== entry.id));
       setNotice("Lançamento excluído.");
+      setEntryToDelete(null);
     } else setNotice("Não foi possível excluir.");
   }
 
@@ -465,7 +463,7 @@ export default function Home() {
                           </button>
                           <button
                             className="danger icon-action"
-                            onClick={() => void removeEntry(entry)}
+                            onClick={() => setEntryToDelete(entry)}
                             aria-label={`Excluir ${entry.description}`}
                             title="Excluir"
                           >
@@ -619,7 +617,10 @@ export default function Home() {
                   inputMode="decimal"
                   value={draft.amount}
                   onChange={(e) =>
-                    setDraft((d) => ({ ...d, amount: e.target.value }))
+                    setDraft((d) => ({
+                      ...d,
+                      amount: formatMoneyInput(e.target.value),
+                    }))
                   }
                   placeholder="0,00"
                 />
@@ -724,6 +725,19 @@ export default function Home() {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={Boolean(entryToDelete)}
+        title="Excluir lançamento?"
+        message={
+          entryToDelete
+            ? `O lançamento “${entryToDelete.description}” será removido permanentemente.`
+            : ""
+        }
+        confirmLabel="Excluir"
+        danger
+        onCancel={() => setEntryToDelete(null)}
+        onConfirm={() => entryToDelete && void removeEntry(entryToDelete)}
+      />
     </main>
   );
 }
