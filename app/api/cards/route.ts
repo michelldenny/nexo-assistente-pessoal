@@ -16,10 +16,10 @@ export async function GET() {
         db.from("card_invoices").select("*"),
       ]);
     for (const r of [ca, pu, ins, inv]) if (r.error) throw r.error;
-    const cards = (ca.data ?? []).map((r) => camel<any>(r)),
-      purchases = (pu.data ?? []).map((r) => camel<any>(r)),
-      installments = (ins.data ?? []).map((r) => camel<any>(r)),
-      invoices = (inv.data ?? []).map((r) => camel<any>(r));
+    const cards = (ca.data ?? []).map((r) => camel<Record<string, unknown>>(r)),
+      purchases = (pu.data ?? []).map((r) => camel<Record<string, unknown>>(r)),
+      installments = (ins.data ?? []).map((r) => camel<Record<string, unknown>>(r)),
+      invoices = (inv.data ?? []).map((r) => camel<Record<string, unknown>>(r));
     const invoiceRows = invoices
       .map((i) => ({
         ...i,
@@ -27,19 +27,32 @@ export async function GET() {
           .filter(
             (x) => x.cardId === i.cardId && x.invoiceMonth === i.referenceMonth,
           )
-          .reduce((s: number, x: any) => s + x.amountCents, 0),
+          .reduce((s: number, x) => s + (Number(x.amountCents) || 0), 0),
       }))
-      .sort((a, b) => b.referenceMonth.localeCompare(a.referenceMonth));
+      .sort((a, b) => String(b.referenceMonth).localeCompare(String(a.referenceMonth)));
     const debts = purchases
-      .filter((p) => p.installmentCount > 1)
+      .filter((p) => Number(p.installmentCount) > 1)
       .map((p) => {
-        const parts = installments.filter((i) => i.purchaseId === p.id),
-          paid = parts.filter((i) => i.status === "paid");
+        const parts = installments
+          .filter((i) => i.purchaseId === p.id)
+          .sort((a, b) => Number(a.installmentNumber) - Number(b.installmentNumber));
+        const paid = parts.filter((i) => i.status === "paid");
+        const startMonth =
+          typeof parts[0]?.invoiceMonth === "string"
+            ? parts[0].invoiceMonth
+            : String(p.purchaseDate ?? "").slice(0, 7);
+        const endMonth =
+          typeof parts[parts.length - 1]?.invoiceMonth === "string"
+            ? String(parts[parts.length - 1].invoiceMonth)
+            : addMonths(startMonth, Math.max(0, Number(p.installmentCount) - 1));
         return {
           ...p,
+          startDate: p.purchaseDate,
+          startMonth,
+          endMonth,
           paidInstallments: paid.length,
-          paidCents: paid.reduce((s: number, i: any) => s + i.amountCents, 0),
-          installmentCents: parts[0]?.amountCents ?? 0,
+          paidCents: paid.reduce((s: number, i) => s + (Number(i.amountCents) || 0), 0),
+          installmentCents: Number(parts[0]?.amountCents) || 0,
         };
       });
     return Response.json({

@@ -55,16 +55,37 @@ export default function AgendaView({
   onNotice,
   pendingDraft,
   onDraftOpened,
+  selectedMonth,
+  onMonthChange,
 }: {
   onNotice: (message: string) => void;
   pendingDraft?: EventDraft | null;
   onDraftOpened?: () => void;
+  selectedMonth?: string;
+  onMonthChange?: (m: string) => void;
 }) {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [month, setMonth] = useState(() => {
+    if (selectedMonth && /^\d{4}-\d{2}$/.test(selectedMonth)) {
+      const [y, m] = selectedMonth.split("-").map(Number);
+      return new Date(Date.UTC(y, m - 1, 1));
+    }
     const now = new Date();
     return new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
   });
+
+  useEffect(() => {
+    if (selectedMonth && /^\d{4}-\d{2}$/.test(selectedMonth)) {
+      const [y, m] = selectedMonth.split("-").map(Number);
+      setMonth(new Date(Date.UTC(y, m - 1, 1)));
+    }
+  }, [selectedMonth]);
+
+  const updateMonth = (newDate: Date) => {
+    setMonth(newDate);
+    const key = `${newDate.getUTCFullYear()}-${String(newDate.getUTCMonth() + 1).padStart(2, "0")}`;
+    onMonthChange?.(key);
+  };
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<EventDraft>(newDraft);
@@ -199,7 +220,7 @@ export default function AgendaView({
         <div className="agenda-tools">
           <button
             onClick={() =>
-              setMonth(
+              updateMonth(
                 new Date(
                   Date.UTC(month.getUTCFullYear(), month.getUTCMonth() - 1, 1),
                 ),
@@ -212,7 +233,7 @@ export default function AgendaView({
           <button
             onClick={() => {
               const now = new Date();
-              setMonth(
+              updateMonth(
                 new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1)),
               );
             }}
@@ -221,7 +242,7 @@ export default function AgendaView({
           </button>
           <button
             onClick={() =>
-              setMonth(
+              updateMonth(
                 new Date(
                   Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1),
                 ),

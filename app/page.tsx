@@ -73,6 +73,7 @@ export default function Home() {
     "Posso registrar lançamentos, consultar seus gastos e explicar o que mudou no seu mês.",
   );
   const [tab, setTab] = useState("Visão geral");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
@@ -93,7 +94,7 @@ export default function Home() {
   }, [month]);
   useEffect(() => {
     if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(""), 4500);
+    const timer = window.setTimeout(() => setNotice(""), 1000);
     return () => window.clearTimeout(timer);
   }, [notice]);
   async function loadInsights() {
@@ -186,7 +187,10 @@ export default function Home() {
     }
   }
 
-  async function removeEntry(entry: Entry, scope: "one" | "future" = "one") {
+  async function removeEntry(
+    entry: Entry,
+    scope: "one" | "all" | "future" = "one",
+  ) {
     const response = await fetch(
       `/api/transactions?id=${entry.id}&scope=${scope}`,
       {
@@ -196,9 +200,11 @@ export default function Home() {
     if (response.ok) {
       setEntries((current) => current.filter((e) => e.id !== entry.id));
       setNotice(
-        scope === "future"
-          ? "Este lançamento e todas as recorrências futuras foram excluídos."
-          : "Lançamento excluído.",
+        scope === "all"
+          ? "Todas as recorrências deste lançamento foram excluídas."
+          : scope === "future"
+            ? "Este lançamento e todas as recorrências futuras foram excluídos."
+            : "Lançamento excluído.",
       );
       setEntryToDelete(null);
     } else setNotice("Não foi possível excluir.");
@@ -317,11 +323,25 @@ export default function Home() {
   }
 
   return (
-    <main className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-mark">n</span>
-          <span>nexo</span>
+    <main className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+      <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
+        <div className="sidebar-header">
+          <div className="brand" title="Nexo Assistente Pessoal">
+            <span className="brand-mark">n</span>
+            {!sidebarCollapsed && <span>nexo</span>}
+          </div>
+          <button
+            className="sidebar-collapse-btn"
+            onClick={() => setSidebarCollapsed((c) => !c)}
+            aria-label={
+              sidebarCollapsed ? "Expandir barra lateral" : "Recolher barra lateral"
+            }
+            title={
+              sidebarCollapsed ? "Expandir menu lateral" : "Recolher menu lateral"
+            }
+          >
+            {sidebarCollapsed ? "»" : "«"}
+          </button>
         </div>
         <nav aria-label="Navegação principal">
           {[
@@ -336,28 +356,38 @@ export default function Home() {
               key={item}
               className={tab === item ? "nav-item active" : "nav-item"}
               onClick={() => setTab(item)}
+              title={sidebarCollapsed ? item : undefined}
             >
-              <span>{["⌂", "↗", "✦", "□", "▣", "◔"][index]}</span>
-              {item}
+              <span className="nav-icon">{["⌂", "↗", "✦", "□", "▣", "◔"][index]}</span>
+              {!sidebarCollapsed && <span className="nav-text">{item}</span>}
             </button>
           ))}
-          <p className="nav-label">EM BREVE</p>
-          <button className="nav-item muted" disabled>
-            <span>○</span>Documentos
+          {!sidebarCollapsed && <p className="nav-label">EM BREVE</p>}
+          <button
+            className="nav-item muted"
+            disabled
+            title={sidebarCollapsed ? "Documentos (Em breve)" : undefined}
+          >
+            <span className="nav-icon">○</span>
+            {!sidebarCollapsed && <span className="nav-text">Documentos</span>}
           </button>
         </nav>
-        <div className="profile">
+        <div className="profile" title={sidebarCollapsed ? "Minha conta - Espaço privado" : undefined}>
           <div className="avatar">MR</div>
-          <div>
-            <strong>Minha conta</strong>
-            <small>Espaço privado</small>
-          </div>
-          <button aria-label="Mais opções">•••</button>
+          {!sidebarCollapsed && (
+            <>
+              <div>
+                <strong>Minha conta</strong>
+                <small>Espaço privado</small>
+              </div>
+              <button aria-label="Mais opções">•••</button>
+            </>
+          )}
         </div>
       </aside>
 
       <section className="workspace">
-        {!["Agenda", "Cartões", "Dívidas"].includes(tab) && (
+        {tab !== "Dívidas" && (
           <header className="topbar">
             <div>
               <p className="eyebrow">SEU PAINEL PESSOAL</p>
@@ -379,18 +409,21 @@ export default function Home() {
                   ›
                 </button>
               </div>
-              <button
-                className="primary"
-                onClick={() => openNew({ occurredOn: `${month}-01` })}
-              >
-                <span>＋</span>Novo lançamento
-              </button>
+              {tab !== "Agenda" && tab !== "Cartões" && (
+                <button
+                  className="primary"
+                  onClick={() => openNew({ occurredOn: `${month}-01` })}
+                >
+                  <span>＋</span>Novo lançamento
+                </button>
+              )}
             </div>
           </header>
         )}
         {notice && (
           <div className="notice" role="status">
-            {notice}
+            <span className="notice-icon">✓</span>
+            <span className="notice-text">{notice}</span>
             <button onClick={() => setNotice("")} aria-label="Fechar aviso">
               ×
             </button>
@@ -402,11 +435,15 @@ export default function Home() {
             onNotice={setNotice}
             pendingDraft={agendaDraft}
             onDraftOpened={() => setAgendaDraft(null)}
+            selectedMonth={month}
+            onMonthChange={setMonth}
           />
         ) : tab === "Cartões" || tab === "Dívidas" ? (
           <CardsView
             mode={tab === "Cartões" ? "cards" : "debts"}
             onNotice={setNotice}
+            selectedMonth={month}
+            onMonthChange={setMonth}
           />
         ) : (
           <div
@@ -480,20 +517,30 @@ export default function Home() {
                   entries
                     .slice(0, tab === "Financeiro" ? 200 : 5)
                     .map((entry) => (
-                      <div className="transaction" key={entry.id}>
+                      <div className={`transaction ${entry.kind}`} key={entry.id}>
                         <div
-                          className="transaction-icon"
+                          className={`transaction-icon ${entry.kind}`}
                           style={{
-                            background: `${CATEGORY_COLORS[entry.category] ?? CATEGORY_COLORS.Outros}18`,
+                            background:
+                              entry.kind === "income"
+                                ? "#e8f7ee"
+                                : `${CATEGORY_COLORS[entry.category] ?? CATEGORY_COLORS.Outros}18`,
                             color:
-                              CATEGORY_COLORS[entry.category] ??
-                              CATEGORY_COLORS.Outros,
+                              entry.kind === "income"
+                                ? "#168565"
+                                : (CATEGORY_COLORS[entry.category] ??
+                                  CATEGORY_COLORS.Outros),
                           }}
                         >
-                          {entry.description.charAt(0).toUpperCase()}
+                          {entry.kind === "income" ? "↓" : "↑"}
                         </div>
                         <div className="transaction-copy">
-                          <strong>{entry.description}</strong>
+                          <div className="transaction-header-line">
+                            <strong>{entry.description}</strong>
+                            <span className={`kind-pill ${entry.kind}`}>
+                              {entry.kind === "income" ? "Receita" : "Despesa"}
+                            </span>
+                          </div>
                           <small>
                             {entry.category} · {displayDate(entry.occurredOn)}
                             {entry.source === "assistant"
@@ -501,7 +548,7 @@ export default function Home() {
                               : ""}
                           </small>
                         </div>
-                        <strong className={entry.kind}>
+                        <strong className={`transaction-amount ${entry.kind}`}>
                           {entry.kind === "income" ? "+ " : "− "}
                           {money(entry.amountCents)}
                         </strong>
@@ -857,24 +904,45 @@ export default function Home() {
             <div className="dialog-symbol danger">!</div>
             <h2>Excluir lançamento recorrente?</h2>
             <p>
-              Você pode remover somente “{entryToDelete.description}” deste mês
-              ou interromper também todas as ocorrências futuras.
+              Deseja excluir apenas o lançamento de <strong>“{entryToDelete.description}”</strong> deste mês ou excluir <strong>todas as recorrências</strong> vinculadas a esta regra?
             </p>
             <div className="recurrence-delete-actions">
               <button onClick={() => setEntryToDelete(null)}>Cancelar</button>
               <button onClick={() => void removeEntry(entryToDelete, "one")}>
-                Somente este mês
+                Excluir apenas esta ocorrência
               </button>
               <button
                 className="dialog-danger"
-                onClick={() => void removeEntry(entryToDelete, "future")}
+                onClick={() => void removeEntry(entryToDelete, "all")}
               >
-                Este e os futuros
+                Excluir todas as recorrências
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Barra de navegação inferior fixa para dispositivos móveis */}
+      <nav className="mobile-bottom-nav" aria-label="Navegação móvel">
+        {[
+          { name: "Visão geral", icon: "⌂", label: "Início" },
+          { name: "Financeiro", icon: "↗", label: "Finanças" },
+          { name: "Assistente", icon: "✦", label: "Nexo" },
+          { name: "Agenda", icon: "□", label: "Agenda" },
+          { name: "Cartões", icon: "▣", label: "Cartões" },
+          { name: "Dívidas", icon: "◔", label: "Dívidas" },
+        ].map((item) => (
+          <button
+            key={item.name}
+            className={`bottom-nav-item ${tab === item.name ? "active" : ""}`}
+            onClick={() => setTab(item.name)}
+            aria-label={item.name}
+          >
+            <span className="bottom-nav-icon">{item.icon}</span>
+            <span className="bottom-nav-label">{item.label}</span>
+          </button>
+        ))}
+      </nav>
     </main>
   );
 }

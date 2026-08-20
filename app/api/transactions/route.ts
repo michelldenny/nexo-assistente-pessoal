@@ -209,6 +209,20 @@ export async function DELETE(req: Request) {
         { status: 404 },
       );
     const now = new Date().toISOString();
+    if (scope === "all" && transaction.recurring_rule_id) {
+      const all = await db
+        .from("transactions")
+        .update({ deleted_at: now, updated_at: now })
+        .eq("recurring_rule_id", transaction.recurring_rule_id)
+        .is("deleted_at", null);
+      if (all.error) throw all.error;
+      const rule = await db
+        .from("recurring_rules")
+        .update({ active: false, updated_at: now })
+        .eq("id", transaction.recurring_rule_id);
+      if (rule.error) throw rule.error;
+      return Response.json({ deleted: true, id, scope: "all" });
+    }
     if (scope === "future" && transaction.recurring_rule_id) {
       const future = await db
         .from("transactions")

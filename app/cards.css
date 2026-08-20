@@ -127,12 +127,12 @@
   opacity: 0.75;
 }
 .purchases-modal {
-  max-width: 620px;
+  max-width: 640px;
 }
 .purchase-list {
   display: grid;
-  gap: 8px;
-  max-height: 430px;
+  gap: 10px;
+  max-height: 440px;
   overflow: auto;
   margin-top: 18px;
 }
@@ -140,10 +140,51 @@
   display: grid;
   grid-template-columns: 1fr auto auto auto;
   align-items: center;
-  gap: 15px;
-  padding: 13px;
+  gap: 14px;
+  padding: 13px 15px;
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: 12px;
+  background: #ffffff;
+  transition: background 0.15s ease;
+}
+.purchase-list article:hover {
+  background: #fafbf9;
+}
+.purchase-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.purchase-item-info strong {
+  font-size: 13px;
+  color: var(--ink);
+}
+.purchase-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #163e32;
+  background: #eaf3ed;
+  border: 1px solid #d4e7db;
+  padding: 4px 8px;
+  border-radius: 7px;
+  white-space: nowrap;
+}
+.purchase-amount-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 90px;
+}
+.purchase-amount-col b {
+  font-size: 13.5px;
+  color: var(--ink);
+}
+.purchase-amount-col small {
+  font-size: 9px;
+  color: var(--muted);
+  white-space: nowrap;
 }
 .purchase-delete {
   width: 32px;
@@ -155,6 +196,11 @@
   border-radius: 9px;
   background: #fff8f6;
   color: #b95749;
+  cursor: pointer;
+}
+.purchase-delete:hover {
+  background: #feece8;
+  border-color: #e8c2bb;
 }
 .purchase-value-mode {
   display: grid;
@@ -336,6 +382,26 @@
   font-size: 13px;
   color: var(--ink);
 }
+.debt-timeline {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+  font-size: 11px;
+  color: var(--muted);
+}
+.debt-timeline span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.debt-timeline strong {
+  color: var(--ink);
+  font-weight: 700;
+  text-transform: capitalize;
+}
 .debt-overview {
   display: grid;
   grid-template-columns: minmax(190px, 0.55fr) minmax(240px, 0.75fr) minmax(
@@ -434,8 +500,9 @@
   }
   .purchase-list article {
     grid-template-columns: 1fr auto auto;
+    gap: 10px;
   }
-  .purchase-list article > div {
+  .purchase-item-info {
     grid-column: 1 / -1;
   }
   .cards-chart {

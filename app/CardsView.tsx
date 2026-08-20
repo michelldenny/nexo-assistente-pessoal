@@ -30,6 +30,9 @@ type Debt = {
   paidInstallments: number;
   paidCents: number;
   installmentCents: number;
+  startMonth?: string;
+  endMonth?: string;
+  startDate?: string;
 };
 type Purchase = {
   id: number;
@@ -73,9 +76,13 @@ const emptyPurchase = {
 export default function CardsView({
   mode,
   onNotice,
+  selectedMonth,
+  onMonthChange,
 }: {
   mode: "cards" | "debts";
   onNotice: (m: string) => void;
+  selectedMonth?: string;
+  onMonthChange?: (m: string) => void;
 }) {
   const [data, setData] = useState<Data>({
     cards: [],
@@ -444,6 +451,14 @@ export default function CardsView({
                       Valor parcela<strong>{money(d.installmentCents)}</strong>
                     </span>
                   </div>
+                  <div className="debt-timeline">
+                    <span>
+                      Início: <strong>{formatMonth(d.startMonth || d.startDate?.slice(0, 7) || "")}</strong>
+                    </span>
+                    <span>
+                      Término: <strong>{formatMonth(d.endMonth || "")}</strong>
+                    </span>
+                  </div>
                 </article>
               );
             })
@@ -721,33 +736,40 @@ export default function CardsView({
               {data.purchases
                 .filter((p) => p.cardId === selectedCard.id)
                 .sort((a, b) => b.purchaseDate.localeCompare(a.purchaseDate))
-                .map((p) => (
-                  <article key={p.id}>
-                    <div>
-                      <strong>{p.description}</strong>
-                      <small>
-                        {p.category} ·{" "}
-                        {new Date(
-                          p.purchaseDate + "T12:00:00Z",
-                        ).toLocaleDateString("pt-BR", { timeZone: "UTC" })}
-                      </small>
-                    </div>
-                    <span>
-                      {p.installmentCount > 1
-                        ? `${p.installmentCount}x`
-                        : "À vista"}
-                    </span>
-                    <b>{money(p.totalCents)}</b>
-                    <button
-                      className="purchase-delete"
-                      onClick={() => setPurchaseToDelete(p)}
-                      aria-label={`Excluir ${p.description}`}
-                      title="Excluir compra"
-                    >
-                      🗑
-                    </button>
-                  </article>
-                ))}
+                .map((p) => {
+                  const isInstallment = p.installmentCount > 1;
+                  const installmentValue = isInstallment
+                    ? Math.round(p.totalCents / p.installmentCount)
+                    : p.totalCents;
+                  return (
+                    <article key={p.id} className="purchase-item">
+                      <div className="purchase-item-info">
+                        <strong>{p.description}</strong>
+                        <small>
+                          {p.category} ·{" "}
+                          {new Date(
+                            p.purchaseDate + "T12:00:00Z",
+                          ).toLocaleDateString("pt-BR", { timeZone: "UTC" })}
+                        </small>
+                      </div>
+                      <span className="purchase-badge">
+                        {isInstallment ? `${p.installmentCount}x parcelas` : "À vista"}
+                      </span>
+                      <div className="purchase-amount-col">
+                        <b>{money(installmentValue)}</b>
+                        <small>{isInstallment ? `valor da parcela (Total: ${money(p.totalCents)})` : "valor total"}</small>
+                      </div>
+                      <button
+                        className="purchase-delete"
+                        onClick={() => setPurchaseToDelete(p)}
+                        aria-label={`Excluir ${p.description}`}
+                        title="Excluir compra"
+                      >
+                        🗑
+                      </button>
+                    </article>
+                  );
+                })}
               {!data.purchases.some((p) => p.cardId === selectedCard.id) && (
                 <div className="agenda-empty">
                   <strong>Nenhuma compra neste cartão.</strong>
