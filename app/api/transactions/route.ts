@@ -15,6 +15,11 @@ type Payload = {
   id?: number;
 };
 const validDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
+const firstDayOfNextMonth = (month: string) => {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const date = new Date(Date.UTC(year, monthNumber, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-01`;
+};
 function validate(p: Payload) {
   const description = p.description?.trim() ?? "",
     amount = Math.round(Number(p.amountCents)),
@@ -57,12 +62,13 @@ export async function GET(req: Request) {
       .select("*")
       .is("deleted_at", null)
       .gte("occurred_on", `${month}-01`)
-      .lte("occurred_on", `${month}-31`)
+      .lt("occurred_on", firstDayOfNextMonth(month))
       .order("occurred_on", { ascending: false })
       .order("id", { ascending: false });
     if (error) throw error;
     return Response.json({ transactions: (data ?? []).map((r) => camel(r)) });
   } catch (e) {
+    console.error("Failed to load monthly transactions", e);
     return Response.json(
       {
         error:

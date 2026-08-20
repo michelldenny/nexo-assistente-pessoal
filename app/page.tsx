@@ -89,32 +89,60 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    void loadEntries();
-    void loadInsights();
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void loadEntries(month, controller.signal);
+      void loadInsights(month, controller.signal);
+    }, 180);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [month]);
   useEffect(() => {
     if (!notice) return;
     const timer = window.setTimeout(() => setNotice(""), 1000);
     return () => window.clearTimeout(timer);
   }, [notice]);
-  async function loadInsights() {
-    const response = await fetch(`/api/insights?month=${month}`, {
-      cache: "no-store",
-    });
-    if (response.ok) setInsights((await response.json()).messages ?? []);
-  }
-  async function loadEntries() {
+  async function loadInsights(requestedMonth = month, signal?: AbortSignal) {
     try {
-      const response = await fetch(`/api/transactions?month=${month}`, {
+      const response = await fetch(`/api/insights?month=${requestedMonth}`, {
         cache: "no-store",
+        signal,
       });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error);
-      setEntries(body.transactions);
-    } catch {
+      if (response.ok && !signal?.aborted)
+        setInsights((await response.json()).messages ?? []);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+    }
+  }
+  async function loadEntries(requestedMonth = month, signal?: AbortSignal) {
+    setLoading(true);
+    try {
+      let lastError: Error | null = null;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const response = await fetch(
+            `/api/transactions?month=${requestedMonth}`,
+            { cache: "no-store", signal },
+          );
+          const body = await response.json();
+          if (!response.ok) throw new Error(body.error);
+          if (!signal?.aborted) setEntries(body.transactions);
+          return;
+        } catch (error) {
+          if (error instanceof DOMException && error.name === "AbortError")
+            return;
+          lastError =
+            error instanceof Error ? error : new Error("Falha ao carregar.");
+        }
+      }
+      throw lastError;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
       setNotice("Não foi possível carregar seus dados agora.");
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }
 
@@ -264,10 +292,17 @@ export default function Home() {
         setEditingId(null);
         setModalOpen(true);
       }
-      if (body.type === "purchase_created") {
+      if (
+        body.type === "purchase_created" ||
+        body.type === "purchases_created"
+      ) {
         await loadEntries();
         await loadInsights();
-        setNotice("Compra adicionada ao cartão e à fatura correspondente.");
+        setNotice(
+          body.type === "purchases_created"
+            ? `${body.count} transações da fatura foram importadas.`
+            : "Compra adicionada ao cartão e à fatura correspondente.",
+        );
       }
       if (body.type === "event_draft") {
         setAgendaDraft(body.draft);
@@ -323,7 +358,9 @@ export default function Home() {
   }
 
   return (
-    <main className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+    <main
+      className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}
+    >
       <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
         <div className="sidebar-header">
           <div className="brand" title="Nexo Assistente Pessoal">
@@ -334,10 +371,14 @@ export default function Home() {
             className="sidebar-collapse-btn"
             onClick={() => setSidebarCollapsed((c) => !c)}
             aria-label={
-              sidebarCollapsed ? "Expandir barra lateral" : "Recolher barra lateral"
+              sidebarCollapsed
+                ? "Expandir barra lateral"
+                : "Recolher barra lateral"
             }
             title={
-              sidebarCollapsed ? "Expandir menu lateral" : "Recolher menu lateral"
+              sidebarCollapsed
+                ? "Expandir menu lateral"
+                : "Recolher menu lateral"
             }
           >
             {sidebarCollapsed ? "»" : "«"}
@@ -358,7 +399,9 @@ export default function Home() {
               onClick={() => setTab(item)}
               title={sidebarCollapsed ? item : undefined}
             >
-              <span className="nav-icon">{["⌂", "↗", "✦", "□", "▣", "◔"][index]}</span>
+              <span className="nav-icon">
+                {["⌂", "↗", "✦", "□", "▣", "◔"][index]}
+              </span>
               {!sidebarCollapsed && <span className="nav-text">{item}</span>}
             </button>
           ))}
@@ -372,7 +415,10 @@ export default function Home() {
             {!sidebarCollapsed && <span className="nav-text">Documentos</span>}
           </button>
         </nav>
-        <div className="profile" title={sidebarCollapsed ? "Minha conta - Espaço privado" : undefined}>
+        <div
+          className="profile"
+          title={sidebarCollapsed ? "Minha conta - Espaço privado" : undefined}
+        >
           <div className="avatar">MR</div>
           {!sidebarCollapsed && (
             <>
@@ -517,7 +563,10 @@ export default function Home() {
                   entries
                     .slice(0, tab === "Financeiro" ? 200 : 5)
                     .map((entry) => (
-                      <div className={`transaction ${entry.kind}`} key={entry.id}>
+                      <div
+                        className={`transaction ${entry.kind}`}
+                        key={entry.id}
+                      >
                         <div
                           className={`transaction-icon ${entry.kind}`}
                           style={{
@@ -904,7 +953,10 @@ export default function Home() {
             <div className="dialog-symbol danger">!</div>
             <h2>Excluir lançamento recorrente?</h2>
             <p>
-              Deseja excluir apenas o lançamento de <strong>“{entryToDelete.description}”</strong> deste mês ou excluir <strong>todas as recorrências</strong> vinculadas a esta regra?
+              Deseja excluir apenas o lançamento de{" "}
+              <strong>“{entryToDelete.description}”</strong> deste mês ou
+              excluir <strong>todas as recorrências</strong> vinculadas a esta
+              regra?
             </p>
             <div className="recurrence-delete-actions">
               <button onClick={() => setEntryToDelete(null)}>Cancelar</button>

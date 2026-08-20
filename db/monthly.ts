@@ -1,72 +1,90 @@
 import { getSupabase } from "./supabase";
-export async function syncMonth(month: string) {
+
+const inFlight = new Map<string, Promise<void>>();
+
+function dateInMonth(month: string, requestedDay: number) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  const day = Math.min(Math.max(1, requestedDay), lastDay);
+  return `${month}-${String(day).padStart(2, "0")}`;
+}
+
+async function performSyncMonth(month: string) {
   const db = getSupabase();
-  const { data: rules, error: re } = await db
-    .from("recurring_rules")
-    .select("*")
-    .eq("active", true)
-    .lte("start_month", month);
-  if (re) throw re;
-  const recurring = (rules ?? [])
-    .filter((r) => !r.end_month || r.end_month >= month)
-    .map((r) => ({
-      kind: r.kind,
-      description: r.description,
-      category: r.category,
-      amount_cents: r.amount_cents,
-      occurred_on: `${month}-${String(r.day_of_month).padStart(2, "0")}`,
-      source: "manual",
-      status: "pending",
-      recurring_rule_id: r.id,
+  const [rulesResult, invoicesResult, cardsResult, partsResult] =
+    await Promise.all([
+      db
+        .from("recurring_rules")
+        .select("*")
+        .eq("active", true)
+        .lte("start_month", month),
+      db.from("card_invoices").select("*").eq("reference_month", month),
+      db.from("credit_cards").select("*").is("deleted_at", null),
+      db.from("card_installments").select("*").eq("invoice_month", month),
+    ]);
+  for (const result of [rulesResult, invoicesResult, cardsResult, partsResult])
+    if (result.error) throw result.error;
+
+  const recurring = (rulesResult.data ?? [])
+    .filter((rule) => !rule.end_month || rule.end_month >= month)
+    .map((rule) => ({
+      kind: rule.kind,
+      description: rule.description,
+      category: rule.category,
+      amount_cents: rule.amount_cents,
+      occurred_on: dateInMonth(month, rule.day_of_month),
+      source: "manual" as const,
+      status: "pending" as const,
+      recurring_rule_id: rule.id,
     }));
-  if (recurring.length) {
-    const { error } = await db
-      .from("transactions")
-      .upsert(recurring, {
-        onConflict: "recurring_rule_id,occurred_on",
-        ignoreDuplicates: true,
-      });
-    if (error) throw error;
-  }
-  const [
-    { data: invoices, error: ie },
-    { data: cards, error: ce },
-    { data: parts, error: pe },
-  ] = await Promise.all([
-    db.from("card_invoices").select("*").eq("reference_month", month),
-    db.from("credit_cards").select("*").is("deleted_at", null),
-    db.from("card_installments").select("*").eq("invoice_month", month),
-  ]);
-  if (ie) throw ie;
-  if (ce) throw ce;
-  if (pe) throw pe;
-  const cardMap = Object.fromEntries((cards ?? []).map((c) => [c.id, c]));
-  const rows = (invoices ?? [])
-    .map((i) => {
-      const c = cardMap[i.card_id],
-        total = (parts ?? [])
-          .filter((p) => p.card_id === i.card_id)
-          .reduce((s, p) => s + p.amount_cents, 0);
-      return c && total
+
+  const cardMap = Object.fromEntries(
+    (cardsResult.data ?? []).map((card) => [card.id, card]),
+  );
+  const invoiceRows = (invoicesResult.data ?? [])
+    .map((invoice) => {
+      const card = cardMap[invoice.card_id];
+      const total = (partsResult.data ?? [])
+        .filter((part) => part.card_id === invoice.card_id)
+        .reduce((sum, part) => sum + part.amount_cents, 0);
+      return card && total
         ? {
             kind: "expense" as const,
-            description: `Fatura ${c.name}`,
+            description: `Fatura ${card.name}`,
             category: "Outros",
             amount_cents: total,
-            occurred_on: `${month}-${String(c.due_day).padStart(2, "0")}`,
+            occurred_on: dateInMonth(month, card.due_day),
             source: "manual" as const,
-            status: (i.status === "paid" ? "settled" : "pending") as
-              | "settled"
-              | "pending",
-            invoice_id: i.id,
+            status: (invoice.status === "paid" ? "settled" : "pending") as
+              "settled" | "pending",
+            invoice_id: invoice.id,
           }
         : null;
     })
-    .filter((r): r is NonNullable<typeof r> => r !== null);
-  if (rows.length) {
-    const { error } = await db
-      .from("transactions")
-      .upsert(rows, { onConflict: "invoice_id" });
-    if (error) throw error;
-  }
+    .filter((row): row is NonNullable<typeof row> => row !== null);
+
+  const writes: PromiseLike<{ error: unknown }>[] = [];
+  if (recurring.length)
+    writes.push(
+      db
+        .from("transactions")
+        .upsert(recurring, {
+          onConflict: "recurring_rule_id,occurred_on",
+          ignoreDuplicates: true,
+        }),
+    );
+  if (invoiceRows.length)
+    writes.push(
+      db.from("transactions").upsert(invoiceRows, { onConflict: "invoice_id" }),
+    );
+  const results = await Promise.all(writes);
+  for (const result of results) if (result.error) throw result.error;
+}
+
+export async function syncMonth(month: string) {
+  const running = inFlight.get(month);
+  if (running) return running;
+  const promise = performSyncMonth(month).finally(() => inFlight.delete(month));
+  inFlight.set(month, promise);
+  return promise;
 }

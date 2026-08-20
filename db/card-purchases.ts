@@ -77,3 +77,84 @@ export async function createCardPurchase(input: {
   if (created.error) throw created.error;
   return { purchase: camel(purchase), card: camel(card) };
 }
+
+export async function createCardPurchases(input: {
+  cardName: string;
+  purchases: Array<{
+    description: string;
+    category: string;
+    purchaseDate: string;
+    totalCents: number;
+    installmentCount: number;
+  }>;
+}) {
+  if (!input.purchases.length)
+    throw new Error("Nenhuma compra foi identificada na fatura.");
+  const db = getSupabase();
+  const { data: cards, error: cardError } = await db
+    .from("credit_cards")
+    .select("*")
+    .is("deleted_at", null);
+  if (cardError) throw cardError;
+  const key = input.cardName.trim().toLocaleLowerCase("pt-BR");
+  const card = (cards ?? []).find((item) => {
+    const name = String(item.name).toLocaleLowerCase("pt-BR");
+    const bank = String(item.bank).toLocaleLowerCase("pt-BR");
+    return (
+      name === key || bank === key || name.includes(key) || bank.includes(key)
+    );
+  });
+  if (!card)
+    throw new Error(
+      `Não encontrei o cartão “${input.cardName}”. Cadastre-o ou informe o apelido correto.`,
+    );
+
+  const values = input.purchases.map((purchase) => ({
+    card_id: card.id,
+    description: purchase.description.trim(),
+    category: purchase.category,
+    purchase_date: purchase.purchaseDate,
+    total_cents: Math.round(purchase.totalCents),
+    installment_count: Math.max(1, Math.round(purchase.installmentCount)),
+  }));
+  const { data: createdPurchases, error: purchaseError } = await db
+    .from("card_purchases")
+    .insert(values)
+    .select();
+  if (purchaseError) throw purchaseError;
+
+  const installments = (createdPurchases ?? []).flatMap((created, index) => {
+    const purchase = values[index];
+    const firstMonth = addMonths(
+      purchase.purchase_date.slice(0, 7),
+      Number(purchase.purchase_date.slice(8, 10)) > card.closing_day ? 1 : 0,
+    );
+    const base = Math.floor(purchase.total_cents / purchase.installment_count);
+    const remainder = purchase.total_cents - base * purchase.installment_count;
+    return Array.from({ length: purchase.installment_count }, (_, part) => ({
+      purchase_id: created.id,
+      card_id: card.id,
+      installment_number: part + 1,
+      amount_cents:
+        base + (part === purchase.installment_count - 1 ? remainder : 0),
+      invoice_month: addMonths(firstMonth, part),
+      status: "pending",
+    }));
+  });
+  const installmentsResult = await db
+    .from("card_installments")
+    .insert(installments);
+  if (installmentsResult.error) throw installmentsResult.error;
+  const invoiceRows = [
+    ...new Set(installments.map((part) => part.invoice_month)),
+  ].map((reference_month) => ({ card_id: card.id, reference_month }));
+  const invoicesResult = await db.from("card_invoices").upsert(invoiceRows, {
+    onConflict: "card_id,reference_month",
+    ignoreDuplicates: true,
+  });
+  if (invoicesResult.error) throw invoicesResult.error;
+  return {
+    count: createdPurchases?.length ?? 0,
+    card: camel<{ name: string }>(card),
+  };
+}

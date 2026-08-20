@@ -1,4 +1,9 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
+// The database schema is managed remotely; keep the runtime client flexible.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let cachedClient: SupabaseClient<any, "public", any> | null = null;
+let cachedCredentials = "";
 
 export function getSupabase() {
   const envObj = (globalThis as unknown as { env?: Record<string, string> })
@@ -20,17 +25,28 @@ export function getSupabase() {
 
   if (!supabaseUrl || !supabaseKey)
     throw new Error(
-      "Supabase não configurado. Defina SUPABASE_URL e SUPABASE_SECRET_KEY no arquivo .env.local ou no painel da Vercel."
+      "Supabase não configurado. Defina SUPABASE_URL e SUPABASE_SECRET_KEY no arquivo .env.local ou no painel da Vercel.",
     );
-  return createClient(supabaseUrl, supabaseKey, {
+  const credentials = `${supabaseUrl}:${supabaseKey}`;
+  if (cachedClient && cachedCredentials === credentials) return cachedClient;
+  cachedCredentials = credentials;
+  cachedClient = createClient<any>(supabaseUrl, supabaseKey, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
       detectSessionInUrl: false,
     },
   });
+  return cachedClient;
 }
 
-export function camel<T = Record<string, unknown>>(row: Record<string, unknown>): T {
-  return Object.fromEntries(Object.entries(row).map(([key, value]) => [key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase()), value])) as T;
+export function camel<T = Record<string, unknown>>(
+  row: Record<string, unknown>,
+): T {
+  return Object.fromEntries(
+    Object.entries(row).map(([key, value]) => [
+      key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase()),
+      value,
+    ]),
+  ) as T;
 }

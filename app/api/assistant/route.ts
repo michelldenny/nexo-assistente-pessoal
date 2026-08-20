@@ -1,6 +1,9 @@
 import { camel, getSupabase } from "../../../db/supabase";
 import { INCOME_CATEGORIES, TRANSACTION_CATEGORIES } from "../../categories";
-import { createCardPurchase } from "../../../db/card-purchases";
+import {
+  createCardPurchase,
+  createCardPurchases,
+} from "../../../db/card-purchases";
 
 type Part = {
   text?: string;
@@ -66,6 +69,46 @@ const functionDeclarations = [
         "purchase_date",
         "installment_count",
       ],
+    },
+  },
+  {
+    name: "create_card_statement_purchases",
+    description:
+      "Importe de uma só vez TODAS as compras identificadas em uma fatura ou extrato de cartão anexado. Use esta ferramenta, e não create_card_purchase, quando o usuário pedir para adicionar/importar a fatura inteira.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        card_name: {
+          type: "STRING",
+          description: "Apelido ou banco do cartão identificado na fatura.",
+        },
+        purchases: {
+          type: "ARRAY",
+          description:
+            "Lista completa de compras da fatura, sem incluir total, pagamentos ou saldo anterior.",
+          items: {
+            type: "OBJECT",
+            properties: {
+              description: { type: "STRING" },
+              category: { type: "STRING", enum: TRANSACTION_CATEGORIES },
+              amount_cents: { type: "INTEGER", minimum: 1 },
+              purchase_date: {
+                type: "STRING",
+                description: "Data YYYY-MM-DD.",
+              },
+              installment_count: { type: "INTEGER", minimum: 1, maximum: 60 },
+            },
+            required: [
+              "description",
+              "category",
+              "amount_cents",
+              "purchase_date",
+              "installment_count",
+            ],
+          },
+        },
+      },
+      required: ["card_name", "purchases"],
     },
   },
   {
@@ -139,7 +182,7 @@ async function callGemini(contents: Content[]) {
         systemInstruction: {
           parts: [
             {
-              text: `Você é o Nexo, assistente pessoal financeiro e de agenda. Responda em português do Brasil, de forma curta. Hoje em São Paulo é ${today()}. Leia imagens, PDFs, textos e planilhas anexados, extraindo valores, datas, estabelecimentos, cartões e parcelas. Use as ferramentas para preparar registros ou consultar dados. Se o usuário pedir apenas para ler ou analisar um anexo, responda com a análise sem cadastrar nada. Só salve uma compra de cartão quando ele pedir explicitamente para registrar. Nunca diga que salvou algo apenas preparado.`,
+              text: `Você é o Nexo, assistente pessoal financeiro e de agenda. Responda em português do Brasil, de forma curta. Hoje em São Paulo é ${today()}. Leia imagens, PDFs, textos e planilhas anexados, extraindo valores, datas, estabelecimentos, cartões e parcelas. Use as ferramentas para preparar registros ou consultar dados. Se o usuário pedir apenas para ler ou analisar um anexo, responda com a análise sem cadastrar nada. Só salve compras de cartão quando ele pedir explicitamente para registrar. Quando ele pedir para adicionar ou importar uma fatura/extrato inteiro, chame create_card_statement_purchases UMA ÚNICA VEZ, enviando TODAS as compras identificadas — nunca pare no primeiro item e nunca use create_card_purchase nesse caso. Não trate total da fatura, pagamento, saldo anterior ou resumo como compra e não repita lançamentos duplicados no documento. Nunca diga que salvou algo apenas preparado.`,
             },
           ],
         },
@@ -255,6 +298,49 @@ export async function POST(request: Request) {
       return Response.json({
         type: "purchase_created",
         message: `${a.description} foi lançado diretamente no cartão ${saved.card.name}${a.installment_count > 1 ? ` em ${a.installment_count} parcelas` : ""}.`,
+      });
+    }
+    if (call.name === "create_card_statement_purchases") {
+      const a = call.args as {
+        card_name: string;
+        purchases: Array<{
+          description: string;
+          category: string;
+          amount_cents: number;
+          purchase_date: string;
+          installment_count: number;
+        }>;
+      };
+      const allowedCategories = new Set<string>(TRANSACTION_CATEGORIES);
+      const purchases = (Array.isArray(a.purchases) ? a.purchases : [])
+        .slice(0, 100)
+        .filter(
+          (purchase) =>
+            purchase.description?.trim() &&
+            Number.isFinite(purchase.amount_cents) &&
+            purchase.amount_cents > 0 &&
+            /^\d{4}-\d{2}-\d{2}$/.test(purchase.purchase_date),
+        )
+        .map((purchase) => ({
+          description: purchase.description.trim(),
+          category: allowedCategories.has(purchase.category)
+            ? purchase.category
+            : "Outros",
+          totalCents: Math.round(purchase.amount_cents),
+          purchaseDate: purchase.purchase_date,
+          installmentCount: Math.min(
+            60,
+            Math.max(1, Math.round(purchase.installment_count || 1)),
+          ),
+        }));
+      const saved = await createCardPurchases({
+        cardName: a.card_name,
+        purchases,
+      });
+      return Response.json({
+        type: "purchases_created",
+        count: saved.count,
+        message: `${saved.count} transações da fatura foram adicionadas ao cartão ${saved.card.name}.`,
       });
     }
     if (call.name === "prepare_calendar_event") {
