@@ -161,12 +161,10 @@ export async function POST(req: Request) {
           card_id: cardId,
           reference_month,
         }));
-      const fr = await db
-        .from("card_invoices")
-        .upsert(rows, {
-          onConflict: "card_id,reference_month",
-          ignoreDuplicates: true,
-        });
+      const fr = await db.from("card_invoices").upsert(rows, {
+        onConflict: "card_id,reference_month",
+        ignoreDuplicates: true,
+      });
       if (fr.error) throw fr.error;
       return Response.json({ purchase: camel(p) }, { status: 201 });
     }
@@ -218,6 +216,100 @@ export async function PATCH(req: Request) {
       {
         error:
           e instanceof Error ? e.message : "Não foi possível pagar a fatura.",
+      },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const id = Math.round(
+      Number(new URL(req.url).searchParams.get("purchaseId")),
+    );
+    if (!id)
+      return Response.json({ error: "Compra inválida." }, { status: 400 });
+    const db = getSupabase();
+    const { data: purchase, error: purchaseError } = await db
+      .from("card_purchases")
+      .select("id,card_id")
+      .eq("id", id)
+      .is("deleted_at", null)
+      .single();
+    if (purchaseError || !purchase)
+      return Response.json(
+        { error: "Compra não encontrada." },
+        { status: 404 },
+      );
+    const { data: installments, error: installmentError } = await db
+      .from("card_installments")
+      .select("invoice_month")
+      .eq("purchase_id", id);
+    if (installmentError) throw installmentError;
+    const months = [
+      ...new Set((installments ?? []).map((item) => item.invoice_month)),
+    ];
+    const removedInstallments = await db
+      .from("card_installments")
+      .delete()
+      .eq("purchase_id", id);
+    if (removedInstallments.error) throw removedInstallments.error;
+    const removedPurchase = await db
+      .from("card_purchases")
+      .delete()
+      .eq("id", id);
+    if (removedPurchase.error) throw removedPurchase.error;
+    for (const month of months) {
+      const [
+        { data: remaining, error: remainingError },
+        { data: invoice, error: invoiceError },
+      ] = await Promise.all([
+        db
+          .from("card_installments")
+          .select("amount_cents")
+          .eq("card_id", purchase.card_id)
+          .eq("invoice_month", month),
+        db
+          .from("card_invoices")
+          .select("id")
+          .eq("card_id", purchase.card_id)
+          .eq("reference_month", month)
+          .maybeSingle(),
+      ]);
+      if (remainingError) throw remainingError;
+      if (invoiceError) throw invoiceError;
+      if (!invoice) continue;
+      const total = (remaining ?? []).reduce(
+        (sum, item) => sum + item.amount_cents,
+        0,
+      );
+      if (total === 0) {
+        const transaction = await db
+          .from("transactions")
+          .delete()
+          .eq("invoice_id", invoice.id);
+        if (transaction.error) throw transaction.error;
+        const deletedInvoice = await db
+          .from("card_invoices")
+          .delete()
+          .eq("id", invoice.id);
+        if (deletedInvoice.error) throw deletedInvoice.error;
+      } else {
+        const transaction = await db
+          .from("transactions")
+          .update({ amount_cents: total, updated_at: new Date().toISOString() })
+          .eq("invoice_id", invoice.id);
+        if (transaction.error) throw transaction.error;
+      }
+    }
+    return Response.json({ deleted: true });
+  } catch (error) {
+    return Response.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Não foi possível excluir a compra.",
       },
       { status: 500 },
     );

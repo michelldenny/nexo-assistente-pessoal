@@ -127,3 +127,23 @@
   font-size: 0.82rem;
   line-height: 1.42;
 }
+
+@media (max-width: 720px) {
+  .topbar {
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  .top-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .transaction {
+    flex-wrap: wrap;
+  }
+  .transaction-copy {
+    min-width: 150px;
+  }
+  .row-actions {
+    margin-left: auto;
+  }
+}

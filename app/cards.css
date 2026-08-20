@@ -1,9 +1,383 @@
-.cards-grid,.debt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px;margin-bottom:30px}
-.credit-card{min-height:260px;border:0;text-align:left;border-radius:22px;padding:24px;color:white;background:linear-gradient(135deg,#173d35,#2f866d);box-shadow:0 16px 35px #17483a2b;display:flex;flex-direction:column;cursor:pointer;transition:transform .2s,box-shadow .2s}.credit-card:hover{transform:translateY(-3px);box-shadow:0 20px 42px #17483a3d}
-.credit-card.purple{background:linear-gradient(135deg,#3d315f,#795fc1)}.credit-card.coral{background:linear-gradient(135deg,#813f47,#df795d)}.credit-card.lime{background:linear-gradient(135deg,#3d552a,#7fa64e)}
-.credit-card h3{font-size:23px;margin:4px 0}.credit-card p{font-size:15px;letter-spacing:3px;margin:0}.card-top{display:flex;justify-content:space-between;align-items:start;gap:20px}.invoice-highlight{display:flex;flex-direction:column;margin:24px 0 18px}.invoice-highlight strong{font-size:29px!important;margin-top:4px}.limit-progress{height:7px;background:#ffffff35;border-radius:8px;overflow:hidden}.limit-progress i{display:block;height:100%;background:white;border-radius:8px}.limit-labels{display:grid!important;grid-template-columns:repeat(3,1fr);gap:8px!important;margin-top:10px}.credit-card span{font-size:10px;display:flex;flex-direction:column;gap:4px}.credit-card strong{font-size:12px}.card-hint{margin-top:auto;padding-top:14px;opacity:.75}
-.purchases-modal{max-width:620px}.purchase-list{display:grid;gap:8px;max-height:430px;overflow:auto;margin-top:18px}.purchase-list article{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:15px;padding:13px;border:1px solid var(--line);border-radius:11px}.purchase-list article div{display:flex;flex-direction:column;gap:3px}.purchase-list small{color:var(--muted)}.purchase-list span{font-size:11px;color:var(--green);background:#edf5f0;padding:5px 8px;border-radius:8px}
-.invoice-list{display:grid;gap:10px}.invoice-list article{background:white;border:1px solid var(--line);border-radius:15px;padding:15px 18px;display:grid;grid-template-columns:1fr auto 80px auto;align-items:center;gap:20px}.invoice-list article div{display:flex;flex-direction:column}.invoice-list .paid{color:#198464}.invoice-list .open{color:#bb6b2f}.invoice-list button{border:1px solid var(--line);background:#f8fbf9;padding:8px 10px;border-radius:8px}
-.debt-card{background:white;border:1px solid var(--line);border-radius:18px;padding:20px}.debt-head{display:flex;justify-content:space-between;gap:15px}.debt-head h3{margin:4px 0 16px}.debt-head>strong{color:var(--green)}.progress{height:8px;background:#e7ece9;border-radius:9px;overflow:hidden}.progress i{display:block;height:100%;background:linear-gradient(90deg,var(--green),#77b58f);border-radius:9px}.debt-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:18px}.debt-stats span{font-size:10px;color:var(--muted);display:flex;flex-direction:column;gap:5px}.debt-stats strong{font-size:13px;color:var(--ink)}
-.debt-overview{display:grid;grid-template-columns:minmax(190px,.55fr) minmax(240px,.75fr) minmax(360px,1.7fr);gap:16px}.debt-kpi,.debt-total-progress{background:white;border:1px solid var(--line);border-radius:18px;padding:21px}.debt-kpi{display:flex;flex-direction:column}.debt-kpi small,.debt-total-progress small{color:#8c958f;font-size:9px;font-weight:800;letter-spacing:.13em}.debt-kpi>strong{font-family:"Fraunces Variable",serif;font-size:32px;margin:12px 0 5px}.debt-kpi span,.debt-total-progress span{font-size:10px;color:var(--muted)}.debt-total-progress>div:first-child{display:grid;grid-template-columns:1fr auto;align-items:center;gap:4px}.debt-total-progress>div:first-child strong{font-size:17px;color:var(--green)}.debt-total-progress>div:first-child span{grid-column:1/-1}.general-progress{height:11px;background:#e7ece9;border-radius:12px;overflow:hidden;margin:20px 0 15px}.general-progress i{display:block;height:100%;background:linear-gradient(90deg,var(--green),#8dbb75);border-radius:12px}.debt-total-progress footer{display:flex;justify-content:space-between;gap:20px}.debt-total-progress footer span{display:flex;flex-direction:column;gap:4px}.debt-total-progress footer strong{font-size:12px;color:var(--ink)}
-@media(max-width:950px){.debt-overview{grid-template-columns:1fr 1fr}.debt-total-progress{grid-column:1/-1}}@media(max-width:700px){.invoice-list article{grid-template-columns:1fr auto}.debt-stats{grid-template-columns:1fr}.credit-card>div{flex-direction:column}.debt-overview{grid-template-columns:1fr}.debt-total-progress{grid-column:auto}}
+.cards-grid,
+.debt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 18px;
+  margin-bottom: 30px;
+}
+.credit-card {
+  min-height: 260px;
+  border: 0;
+  text-align: left;
+  border-radius: 22px;
+  padding: 24px;
+  color: white;
+  background: linear-gradient(135deg, #173d35, #2f866d);
+  box-shadow: 0 16px 35px #17483a2b;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
+}
+.credit-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 20px 42px #17483a3d;
+}
+.credit-card.purple {
+  background: linear-gradient(135deg, #3d315f, #795fc1);
+}
+.credit-card.coral {
+  background: linear-gradient(135deg, #813f47, #df795d);
+}
+.credit-card.lime {
+  background: linear-gradient(135deg, #3d552a, #7fa64e);
+}
+.credit-card h3 {
+  font-size: 23px;
+  margin: 4px 0;
+}
+.credit-card p {
+  font-size: 15px;
+  letter-spacing: 3px;
+  margin: 0;
+}
+.card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 20px;
+}
+.invoice-highlight {
+  display: flex;
+  flex-direction: column;
+  margin: 24px 0 18px;
+}
+.invoice-highlight strong {
+  font-size: 29px !important;
+  margin-top: 4px;
+}
+.limit-progress {
+  height: 7px;
+  background: #ffffff35;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.limit-progress i {
+  display: block;
+  height: 100%;
+  background: white;
+  border-radius: 8px;
+}
+.limit-labels {
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px !important;
+  margin-top: 10px;
+}
+.credit-card span {
+  font-size: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.credit-card strong {
+  font-size: 12px;
+}
+.card-hint {
+  margin-top: auto;
+  padding-top: 14px;
+  opacity: 0.75;
+}
+.purchases-modal {
+  max-width: 620px;
+}
+.purchase-list {
+  display: grid;
+  gap: 8px;
+  max-height: 430px;
+  overflow: auto;
+  margin-top: 18px;
+}
+.purchase-list article {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 15px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+}
+.purchase-delete {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #f0d9d5;
+  border-radius: 9px;
+  background: #fff8f6;
+  color: #b95749;
+}
+.cards-chart {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 24px;
+  overflow-x: auto;
+}
+.chart-bars {
+  min-width: 520px;
+  height: 260px;
+  display: flex;
+  align-items: stretch;
+  gap: clamp(12px, 3vw, 30px);
+  padding-top: 12px;
+}
+.chart-column {
+  min-width: 68px;
+  flex: 1;
+  display: grid;
+  grid-template-rows: 30px 1fr 24px;
+  gap: 7px;
+  text-align: center;
+}
+.chart-column strong {
+  font-size: 11px;
+  color: var(--ink);
+}
+.chart-column span {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: capitalize;
+}
+.chart-track {
+  min-height: 150px;
+  display: flex;
+  align-items: end;
+  justify-content: center;
+  border-bottom: 1px solid var(--line);
+  background: repeating-linear-gradient(
+    to top,
+    transparent 0,
+    transparent 39px,
+    #eef1ed 40px
+  );
+}
+.chart-track i {
+  display: block;
+  width: min(42px, 70%);
+  min-height: 7px;
+  border-radius: 8px 8px 3px 3px;
+  background: linear-gradient(180deg, #79b895, var(--green));
+}
+.purchase-list article div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.purchase-list small {
+  color: var(--muted);
+}
+.purchase-list span {
+  font-size: 11px;
+  color: var(--green);
+  background: #edf5f0;
+  padding: 5px 8px;
+  border-radius: 8px;
+}
+.invoice-list {
+  display: grid;
+  gap: 10px;
+}
+.invoice-list article {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  padding: 15px 18px;
+  display: grid;
+  grid-template-columns: 1fr auto 80px auto;
+  align-items: center;
+  gap: 20px;
+}
+.invoice-list article div {
+  display: flex;
+  flex-direction: column;
+}
+.invoice-list .paid {
+  color: #198464;
+}
+.invoice-list .open {
+  color: #bb6b2f;
+}
+.invoice-list button {
+  border: 1px solid var(--line);
+  background: #f8fbf9;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+.debt-card {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 20px;
+}
+.debt-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+}
+.debt-head h3 {
+  margin: 4px 0 16px;
+}
+.debt-head > strong {
+  color: var(--green);
+}
+.progress {
+  height: 8px;
+  background: #e7ece9;
+  border-radius: 9px;
+  overflow: hidden;
+}
+.progress i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--green), #77b58f);
+  border-radius: 9px;
+}
+.debt-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 18px;
+}
+.debt-stats span {
+  font-size: 10px;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.debt-stats strong {
+  font-size: 13px;
+  color: var(--ink);
+}
+.debt-overview {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.55fr) minmax(240px, 0.75fr) minmax(
+      360px,
+      1.7fr
+    );
+  gap: 16px;
+}
+.debt-kpi,
+.debt-total-progress {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 21px;
+}
+.debt-kpi {
+  display: flex;
+  flex-direction: column;
+}
+.debt-kpi small,
+.debt-total-progress small {
+  color: #8c958f;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+}
+.debt-kpi > strong {
+  font-family: "Fraunces Variable", serif;
+  font-size: 32px;
+  margin: 12px 0 5px;
+}
+.debt-kpi span,
+.debt-total-progress span {
+  font-size: 10px;
+  color: var(--muted);
+}
+.debt-total-progress > div:first-child {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px;
+}
+.debt-total-progress > div:first-child strong {
+  font-size: 17px;
+  color: var(--green);
+}
+.debt-total-progress > div:first-child span {
+  grid-column: 1/-1;
+}
+.general-progress {
+  height: 11px;
+  background: #e7ece9;
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 20px 0 15px;
+}
+.general-progress i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--green), #8dbb75);
+  border-radius: 12px;
+}
+.debt-total-progress footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+}
+.debt-total-progress footer span {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.debt-total-progress footer strong {
+  font-size: 12px;
+  color: var(--ink);
+}
+@media (max-width: 950px) {
+  .debt-overview {
+    grid-template-columns: 1fr 1fr;
+  }
+  .debt-total-progress {
+    grid-column: 1/-1;
+  }
+}
+@media (max-width: 700px) {
+  .cards-grid,
+  .debt-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .credit-card {
+    min-height: 245px;
+    padding: 20px;
+  }
+  .purchase-list article {
+    grid-template-columns: 1fr auto auto;
+  }
+  .purchase-list article > div {
+    grid-column: 1 / -1;
+  }
+  .cards-chart {
+    padding: 18px 12px;
+  }
+  .invoice-list article {
+    grid-template-columns: 1fr auto;
+  }
+  .debt-stats {
+    grid-template-columns: 1fr;
+  }
+  .credit-card > div {
+    flex-direction: column;
+  }
+  .debt-overview {
+    grid-template-columns: 1fr;
+  }
+  .debt-total-progress {
+    grid-column: auto;
+  }
+}
