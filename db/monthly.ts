@@ -60,7 +60,7 @@ export async function syncMonth(month: string) {
           }
         : null;
     })
-    .filter(Boolean);
+    .filter((row): row is NonNullable<typeof row> => Boolean(row));
   if (rows.length) {
     const { error } = await db
       .from("transactions")

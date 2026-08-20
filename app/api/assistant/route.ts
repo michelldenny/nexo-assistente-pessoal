@@ -1,4 +1,3 @@
-import { env } from "cloudflare:workers";
 import { camel, getSupabase } from "../../../db/supabase";
 import { INCOME_CATEGORIES, TRANSACTION_CATEGORIES } from "../../categories";
 import { createCardPurchase } from "../../../db/card-purchases";
@@ -116,14 +115,14 @@ const today = () =>
   new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
 
 async function callGemini(contents: Content[]) {
-  if (!env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY não configurada.");
-  const model = env.GEMINI_MODEL || "gemini-3.6-flash";
+  if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY não configurada.");
+  const model = process.env.GEMINI_MODEL || "gemini-3.6-flash";
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
       method: "POST",
       headers: {
-        "x-goog-api-key": env.GEMINI_API_KEY,
+        "x-goog-api-key": process.env.GEMINI_API_KEY,
         "content-type": "application/json",
       },
       body: JSON.stringify({

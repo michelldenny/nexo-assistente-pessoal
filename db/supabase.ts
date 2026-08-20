@@ -1,9 +1,8 @@
-import { env } from "cloudflare:workers";
 import { createClient } from "@supabase/supabase-js";
 
 export function getSupabase() {
-  if (!env.SUPABASE_URL || !env.SUPABASE_SECRET_KEY) throw new Error("Supabase não configurado.");
-  return createClient(env.SUPABASE_URL, env.SUPABASE_SECRET_KEY, {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY) throw new Error("Supabase não configurado.");
+  return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 }
