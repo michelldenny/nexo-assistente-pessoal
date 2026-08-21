@@ -460,8 +460,11 @@ export async function PATCH(req: Request) {
           cardId: part.card_id,
           month: part.invoice_month,
         });
-      for (const item of affected.values())
-        await reconcileInvoiceMonth(db, item.cardId, item.month);
+      await Promise.all(
+        Array.from(affected.values()).map((item) =>
+          reconcileInvoiceMonth(db, item.cardId, item.month),
+        ),
+      );
       return Response.json({ updated: true });
     }
     if (b.action !== "pay_invoice")
@@ -478,19 +481,18 @@ export async function PATCH(req: Request) {
         { status: 404 },
       );
     const paid_at = new Date().toISOString(),
-      a = await db
-        .from("card_invoices")
-        .update({ status: "paid", paid_at })
-        .eq("id", id),
-      c = await db
-        .from("card_installments")
-        .update({ status: "paid", paid_at })
-        .eq("card_id", i.card_id)
-        .eq("invoice_month", i.reference_month),
-      t = await db
-        .from("transactions")
-        .update({ status: "settled", updated_at: paid_at })
-        .eq("invoice_id", id);
+      [a, c, t] = await Promise.all([
+        db.from("card_invoices").update({ status: "paid", paid_at }).eq("id", id),
+        db
+          .from("card_installments")
+          .update({ status: "paid", paid_at })
+          .eq("card_id", i.card_id)
+          .eq("invoice_month", i.reference_month),
+        db
+          .from("transactions")
+          .update({ status: "settled", updated_at: paid_at })
+          .eq("invoice_id", id),
+      ]);
     if (a.error) throw a.error;
     if (c.error) throw c.error;
     if (t.error) throw t.error;
@@ -526,13 +528,13 @@ export async function DELETE(req: Request) {
           .in("invoice_id", invoiceIds);
         if (transactions.error) throw transactions.error;
       }
-      for (const table of [
-        "card_installments",
-        "card_purchases",
-        "card_invoices",
-      ] as const) {
-        const removed = await db.from(table).delete().eq("card_id", cardId);
-        if (removed.error) throw removed.error;
+      const tableDeletes = await Promise.all([
+        db.from("card_installments").delete().eq("card_id", cardId),
+        db.from("card_purchases").delete().eq("card_id", cardId),
+        db.from("card_invoices").delete().eq("card_id", cardId),
+      ]);
+      for (const td of tableDeletes) {
+        if (td.error) throw td.error;
       }
       const removedCard = await db
         .from("credit_cards")
@@ -562,59 +564,54 @@ export async function DELETE(req: Request) {
     const months = [
       ...new Set((installments ?? []).map((item) => item.invoice_month)),
     ];
-    const removedInstallments = await db
-      .from("card_installments")
-      .delete()
-      .eq("purchase_id", id);
+    const [removedInstallments, removedPurchase] = await Promise.all([
+      db.from("card_installments").delete().eq("purchase_id", id),
+      db.from("card_purchases").delete().eq("id", id),
+    ]);
     if (removedInstallments.error) throw removedInstallments.error;
-    const removedPurchase = await db
-      .from("card_purchases")
-      .delete()
-      .eq("id", id);
     if (removedPurchase.error) throw removedPurchase.error;
-    for (const month of months) {
-      const [
-        { data: remaining, error: remainingError },
-        { data: invoice, error: invoiceError },
-      ] = await Promise.all([
-        db
-          .from("card_installments")
-          .select("amount_cents")
-          .eq("card_id", purchase.card_id)
-          .eq("invoice_month", month),
-        db
-          .from("card_invoices")
-          .select("id")
-          .eq("card_id", purchase.card_id)
-          .eq("reference_month", month)
-          .maybeSingle(),
-      ]);
-      if (remainingError) throw remainingError;
-      if (invoiceError) throw invoiceError;
-      if (!invoice) continue;
-      const total = (remaining ?? []).reduce(
-        (sum, item) => sum + item.amount_cents,
-        0,
-      );
-      if (total === 0) {
-        const transaction = await db
-          .from("transactions")
-          .delete()
-          .eq("invoice_id", invoice.id);
-        if (transaction.error) throw transaction.error;
-        const deletedInvoice = await db
-          .from("card_invoices")
-          .delete()
-          .eq("id", invoice.id);
-        if (deletedInvoice.error) throw deletedInvoice.error;
-      } else {
-        const transaction = await db
-          .from("transactions")
-          .update({ amount_cents: total, updated_at: new Date().toISOString() })
-          .eq("invoice_id", invoice.id);
-        if (transaction.error) throw transaction.error;
-      }
-    }
+
+    await Promise.all(
+      months.map(async (month) => {
+        const [
+          { data: remaining, error: remainingError },
+          { data: invoice, error: invoiceError },
+        ] = await Promise.all([
+          db
+            .from("card_installments")
+            .select("amount_cents")
+            .eq("card_id", purchase.card_id)
+            .eq("invoice_month", month),
+          db
+            .from("card_invoices")
+            .select("id")
+            .eq("card_id", purchase.card_id)
+            .eq("reference_month", month)
+            .maybeSingle(),
+        ]);
+        if (remainingError) throw remainingError;
+        if (invoiceError) throw invoiceError;
+        if (!invoice) return;
+        const total = (remaining ?? []).reduce(
+          (sum, item) => sum + item.amount_cents,
+          0,
+        );
+        if (total === 0) {
+          const [txDel, invDel] = await Promise.all([
+            db.from("transactions").delete().eq("invoice_id", invoice.id),
+            db.from("card_invoices").delete().eq("id", invoice.id),
+          ]);
+          if (txDel.error) throw txDel.error;
+          if (invDel.error) throw invDel.error;
+        } else {
+          const transaction = await db
+            .from("transactions")
+            .update({ amount_cents: total, updated_at: new Date().toISOString() })
+            .eq("invoice_id", invoice.id);
+          if (transaction.error) throw transaction.error;
+        }
+      }),
+    );
     return Response.json({ deleted: true });
   } catch (error) {
     return Response.json(

@@ -221,44 +221,75 @@ export default function Home() {
     entry: Entry,
     scope: "one" | "all" | "future" = "one",
   ) {
-    const response = await fetch(
-      `/api/transactions?id=${entry.id}&scope=${scope}`,
-      {
-        method: "DELETE",
-      },
+    const previousEntries = entries;
+    setEntryToDelete(null);
+    setEntries((current) =>
+      scope === "all"
+        ? current.filter((e) => e.recurringRuleId !== entry.recurringRuleId || !entry.recurringRuleId)
+        : scope === "future"
+          ? current.filter(
+              (e) =>
+                e.recurringRuleId !== entry.recurringRuleId ||
+                !entry.recurringRuleId ||
+                e.occurredOn < entry.occurredOn,
+            )
+          : current.filter((e) => e.id !== entry.id),
     );
-    if (response.ok) {
-      setEntries((current) => current.filter((e) => e.id !== entry.id));
-      setNotice(
-        scope === "all"
-          ? "Todas as recorrências deste lançamento foram excluídas."
-          : scope === "future"
-            ? "Este lançamento e todas as recorrências futuras foram excluídos."
-            : "Lançamento excluído.",
+    setNotice(
+      scope === "all"
+        ? "Todas as recorrências deste lançamento foram excluídas."
+        : scope === "future"
+          ? "Este lançamento e todas as recorrências futuras foram excluídos."
+          : "Lançamento excluído.",
+    );
+    try {
+      const response = await fetch(
+        `/api/transactions?id=${entry.id}&scope=${scope}`,
+        {
+          method: "DELETE",
+        },
       );
-      setEntryToDelete(null);
-    } else setNotice("Não foi possível excluir.");
+      if (!response.ok) {
+        throw new Error("Não foi possível excluir.");
+      }
+    } catch {
+      setEntries(previousEntries);
+      setNotice("Não foi possível excluir o lançamento.");
+    }
   }
 
   async function toggleStatus(entry: Entry) {
-    const response = await fetch("/api/transactions", {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id: entry.id, action: "toggle_status" }),
-    });
-    const body = await response.json();
-    if (response.ok) {
+    const newStatus = entry.status === "settled" ? "pending" : "settled";
+    const previousEntries = entries;
+    setEntries((current) =>
+      current.map((item) =>
+        item.id === entry.id ? { ...item, status: newStatus } : item,
+      ),
+    );
+    setNotice(
+      entry.status === "settled"
+        ? "Status reaberto."
+        : entry.kind === "income"
+          ? "Receita recebida."
+          : "Despesa paga.",
+    );
+    try {
+      const response = await fetch("/api/transactions", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: entry.id, action: "toggle_status" }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        throw new Error(body.error || "Não foi possível alterar o status.");
+      }
       setEntries((current) =>
         current.map((item) => (item.id === entry.id ? body.transaction : item)),
       );
-      setNotice(
-        entry.status === "settled"
-          ? "Status reaberto."
-          : entry.kind === "income"
-            ? "Receita recebida."
-            : "Despesa paga.",
-      );
-    } else setNotice(body.error || "Não foi possível alterar o status.");
+    } catch {
+      setEntries(previousEntries);
+      setNotice("Não foi possível alterar o status.");
+    }
   }
 
   function statusLabel(entry: Entry) {

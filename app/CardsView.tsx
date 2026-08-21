@@ -315,9 +315,9 @@ export default function CardsView({
       if (!r.ok) throw new Error(b.error);
       setCardModal(false);
       setCard(emptyCard);
-      await load();
       setEditingCardId(null);
       onNotice(editingCardId ? "Cartão atualizado." : "Cartão cadastrado.");
+      void load();
     } catch (e) {
       onNotice(e instanceof Error ? e.message : "Não foi possível salvar.");
     } finally {
@@ -325,16 +325,29 @@ export default function CardsView({
     }
   }
   async function removeCard(item: Card) {
-    const response = await fetch(`/api/cards?cardId=${item.id}`, {
-      method: "DELETE",
-    });
-    const body = await response.json();
-    if (!response.ok)
-      return onNotice(body.error || "Não foi possível excluir o cartão.");
+    const previousData = data;
     setSelectedCard(null);
     setCardToDelete(null);
-    await load();
-    onNotice("Cartão e todos os dados vinculados foram excluídos.");
+    setData((prev) => ({
+      ...prev,
+      cards: prev.cards.filter((c) => c.id !== item.id),
+      purchases: prev.purchases.filter((p) => p.cardId !== item.id),
+      installments: prev.installments.filter((i) => i.cardId !== item.id),
+      invoices: prev.invoices.filter((inv) => inv.cardId !== item.id),
+      debts: prev.debts.filter((d) => d.cardId !== item.id),
+    }));
+    onNotice("Cartão excluído.");
+    try {
+      const response = await fetch(`/api/cards?cardId=${item.id}`, {
+        method: "DELETE",
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "Não foi possível excluir o cartão.");
+      void load();
+    } catch (e) {
+      setData(previousData);
+      onNotice(e instanceof Error ? e.message : "Não foi possível excluir o cartão.");
+    }
   }
   async function savePurchase() {
     setSaving(true);
@@ -360,7 +373,6 @@ export default function CardsView({
         b = await r.json();
       if (!r.ok) throw new Error(b.error);
       closePurchaseModal();
-      await load();
       onNotice(
         editingPurchaseId
           ? "Compra, parcelas e faturas atualizadas."
@@ -368,6 +380,7 @@ export default function CardsView({
             ? "Compra adicionada às Dívidas."
             : "Compra adicionada à fatura.",
       );
+      void load();
     } catch (e) {
       onNotice(e instanceof Error ? e.message : "Não foi possível salvar.");
     } finally {
@@ -375,15 +388,26 @@ export default function CardsView({
     }
   }
   async function removePurchase(item: Purchase) {
-    const response = await fetch(`/api/cards?purchaseId=${item.id}`, {
-      method: "DELETE",
-    });
-    const body = await response.json();
-    if (!response.ok)
-      return onNotice(body.error || "Não foi possível excluir.");
-    await load();
+    const previousData = data;
     setPurchaseToDelete(null);
-    onNotice("Compra e parcelas excluídas. As faturas foram recalculadas.");
+    setData((prev) => ({
+      ...prev,
+      purchases: prev.purchases.filter((p) => p.id !== item.id),
+      installments: prev.installments.filter((i) => i.purchaseId !== item.id),
+      debts: prev.debts.filter((d) => d.id !== item.id),
+    }));
+    onNotice("Compra excluída.");
+    try {
+      const response = await fetch(`/api/cards?purchaseId=${item.id}`, {
+        method: "DELETE",
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "Não foi possível excluir.");
+      void load();
+    } catch (e) {
+      setData(previousData);
+      onNotice(e instanceof Error ? e.message : "Não foi possível excluir.");
+    }
   }
   function purchaseForm() {
     return (

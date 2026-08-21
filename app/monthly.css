@@ -150,7 +150,7 @@
 
 .notice {
   position: fixed;
-  z-index: 100;
+  z-index: 1100;
   top: 20px;
   right: 20px;
   left: auto;
@@ -216,7 +216,7 @@
   }
 }
 .system-dialog-backdrop {
-  z-index: 50;
+  z-index: 1000;
 }
 .system-dialog {
   width: min(410px, 100%);

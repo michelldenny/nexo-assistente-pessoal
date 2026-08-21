@@ -184,29 +184,50 @@ export default function AgendaView({
     }
   }
   async function toggle(event: EventItem) {
-    const response = await fetch("/api/events", {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        id: event.id,
-        status: event.status === "completed" ? "scheduled" : "completed",
-      }),
-    });
-    if (response.ok) {
+    const nextStatus = event.status === "completed" ? "scheduled" : "completed";
+    const previousEvents = events;
+    setEvents((current) =>
+      current.map((item) =>
+        item.id === event.id ? { ...item, status: nextStatus } : item,
+      ),
+    );
+    try {
+      const response = await fetch("/api/events", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id: event.id,
+          status: nextStatus,
+        }),
+      });
       const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "Não foi possível atualizar.");
       setEvents((current) =>
         current.map((item) => (item.id === event.id ? body.event : item)),
+      );
+    } catch (error) {
+      setEvents(previousEvents);
+      onNotice(
+        error instanceof Error ? error.message : "Não foi possível atualizar.",
       );
     }
   }
   async function remove(event: EventItem) {
-    const response = await fetch(`/api/events?id=${event.id}`, {
-      method: "DELETE",
-    });
-    if (response.ok) {
-      setEvents((current) => current.filter((item) => item.id !== event.id));
-      onNotice("Compromisso excluído.");
-      setEventToDelete(null);
+    const previousEvents = events;
+    setEventToDelete(null);
+    setEvents((current) => current.filter((item) => item.id !== event.id));
+    onNotice("Compromisso excluído.");
+    try {
+      const response = await fetch(`/api/events?id=${event.id}`, {
+        method: "DELETE",
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "Não foi possível excluir.");
+    } catch (error) {
+      setEvents(previousEvents);
+      onNotice(
+        error instanceof Error ? error.message : "Não foi possível excluir.",
+      );
     }
   }
 
