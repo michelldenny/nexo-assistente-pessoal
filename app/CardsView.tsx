@@ -357,28 +357,38 @@ export default function CardsView({
         totalCents =
           purchase.valueMode === "installment"
             ? enteredCents * installmentCount
-            : enteredCents,
-        r = await fetch("/api/cards", {
-          method: editingPurchaseId ? "PATCH" : "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            action: editingPurchaseId ? "update_purchase" : "create_purchase",
-            purchaseId: editingPurchaseId,
-            ...purchase,
-            cardId: Number(purchase.cardId),
-            totalCents,
-            installmentCount,
-          }),
+            : enteredCents;
+      if (
+        !purchase.cardId ||
+        !purchase.description.trim() ||
+        totalCents === 0 ||
+        !Number.isSafeInteger(totalCents)
+      ) {
+        throw new Error("Preencha todos os campos corretamente.");
+      }
+      const r = await fetch("/api/cards", {
+        method: editingPurchaseId ? "PATCH" : "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: editingPurchaseId ? "update_purchase" : "create_purchase",
+          purchaseId: editingPurchaseId,
+          ...purchase,
+          cardId: Number(purchase.cardId),
+          totalCents,
+          installmentCount,
         }),
+      }),
         b = await r.json();
       if (!r.ok) throw new Error(b.error);
       closePurchaseModal();
       onNotice(
         editingPurchaseId
-          ? "Compra, parcelas e faturas atualizadas."
-          : Number(purchase.installmentCount) > 1
-            ? "Compra adicionada às Dívidas."
-            : "Compra adicionada à fatura.",
+          ? "Transação atualizada."
+          : totalCents < 0
+            ? "Estorno adicionado à fatura."
+            : Number(purchase.installmentCount) > 1
+              ? "Compra adicionada às Dívidas."
+              : "Compra adicionada à fatura.",
       );
       void load();
     } catch (e) {
@@ -410,6 +420,7 @@ export default function CardsView({
     }
   }
   function purchaseForm() {
+    const isNegative = purchase.total.includes("-");
     return (
       <div className="modal-backdrop">
         <div className="modal">
@@ -417,10 +428,20 @@ export default function CardsView({
             ×
           </button>
           <p className="eyebrow">
-            {editingPurchaseId ? "EDITAR COMPRA" : "NOVA COMPRA"}
+            {editingPurchaseId
+              ? isNegative
+                ? "EDITAR ESTORNO"
+                : "EDITAR COMPRA"
+              : isNegative
+                ? "NOVO ESTORNO"
+                : "NOVA COMPRA"}
           </p>
           <h2>
-            {editingPurchaseId ? "Editar transação" : "Adicionar à fatura"}
+            {editingPurchaseId
+              ? "Editar transação"
+              : isNegative
+                ? "Adicionar estorno / crédito"
+                : "Adicionar à fatura"}
           </h2>
           <label>
             Cartão
@@ -441,12 +462,43 @@ export default function CardsView({
           <label>
             Descrição
             <input
+              placeholder={isNegative ? "Ex.: Estorno de compra cancelada" : "Ex.: Supermercado, Restaurante..."}
               value={purchase.description}
               onChange={(e) =>
                 setPurchase({ ...purchase, description: e.target.value })
               }
             />
           </label>
+          <div className="purchase-value-mode">
+            <span>Tipo de lançamento</span>
+            <div>
+              <button
+                type="button"
+                className={!isNegative ? "selected" : ""}
+                onClick={() => {
+                  const cleaned = purchase.total.replace(/^-/, "");
+                  setPurchase({ ...purchase, total: cleaned || "0,00" });
+                }}
+              >
+                ＋ Compra / Despesa
+              </button>
+              <button
+                type="button"
+                className={isNegative ? "selected refund-selected" : ""}
+                onClick={() => {
+                  const val = purchase.total.replace(/^-/, "");
+                  setPurchase({ ...purchase, total: `-${val || "0,00"}` });
+                }}
+              >
+                − Estorno / Crédito
+              </button>
+            </div>
+            <small>
+              {isNegative
+                ? "O valor será registrado como negativo e abaterá o total da sua fatura."
+                : "Lançamento de despesa padrão que soma ao total da fatura."}
+            </small>
+          </div>
           <div className="purchase-value-mode">
             <span>O valor informado é</span>
             <div>
@@ -536,7 +588,9 @@ export default function CardsView({
               ? "Salvando…"
               : editingPurchaseId
                 ? "Salvar alterações"
-                : "Adicionar compra"}
+                : isNegative
+                  ? "Adicionar estorno"
+                  : "Adicionar compra"}
           </button>
         </div>
       </div>
@@ -713,7 +767,7 @@ export default function CardsView({
   }
   const monthlyTotals = Object.entries(
     data.invoices
-      .filter((invoice) => invoice.totalCents > 0)
+      .filter((invoice) => invoice.totalCents !== 0)
       .reduce<Record<string, number>>((totals, invoice) => {
         totals[invoice.referenceMonth] =
           (totals[invoice.referenceMonth] ?? 0) + invoice.totalCents;
@@ -749,7 +803,7 @@ export default function CardsView({
         <div className="cards-grid">
           {data.cards.map((c) => {
             const cardInvoices = data.invoices.filter(
-                (invoice) => invoice.cardId === c.id && invoice.totalCents > 0,
+                (invoice) => invoice.cardId === c.id && invoice.totalCents !== 0,
               ),
               openInvoices = cardInvoices.filter(
                 (invoice) => invoice.status === "open",
@@ -1029,8 +1083,12 @@ export default function CardsView({
             </div>
             <div className="purchase-list">
               {selectedCardPurchases.map((p) => {
+                const isRefund = p.installmentCents < 0;
                 return (
-                  <article key={p.id} className="purchase-item">
+                  <article
+                    key={p.id}
+                    className={`purchase-item ${isRefund ? "refund-item" : ""}`}
+                  >
                     <button
                       className="purchase-edit"
                       onClick={() => openEditPurchase(p)}
@@ -1040,10 +1098,15 @@ export default function CardsView({
                         className="purchase-icon"
                         aria-hidden="true"
                         style={{
-                          backgroundColor: `${CATEGORY_COLORS[p.category] || CATEGORY_COLORS.Outros}16`,
+                          backgroundColor: isRefund
+                            ? "#dcfce7"
+                            : `${CATEGORY_COLORS[p.category] || CATEGORY_COLORS.Outros}16`,
                         }}
                       >
-                        {CATEGORY_ICONS[p.category] || CATEGORY_ICONS.Outros}
+                        {isRefund
+                          ? "↩️"
+                          : CATEGORY_ICONS[p.category] ||
+                            CATEGORY_ICONS.Outros}
                       </span>
                       <div className="purchase-info">
                         <strong>{p.description}</strong>
@@ -1057,15 +1120,19 @@ export default function CardsView({
                               timeZone: "UTC",
                             })}
                           </time>
-                          <span className="purchase-category">
-                            {p.category}
+                          <span
+                            className={`purchase-category ${isRefund ? "refund-tag" : ""}`}
+                          >
+                            {isRefund ? "Estorno" : p.category}
                           </span>
                           <span className="purchase-installment">
                             ({p.currentInstallmentNumber}/{p.installmentCount})
                           </span>
                         </div>
                       </div>
-                      <b className="purchase-amount">
+                      <b
+                        className={`purchase-amount ${isRefund ? "refund" : ""}`}
+                      >
                         {money(p.installmentCents)}
                       </b>
                     </button>

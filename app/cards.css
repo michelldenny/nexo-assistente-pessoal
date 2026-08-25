@@ -305,6 +305,18 @@
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+.purchase-amount.refund {
+  color: #059669;
+  font-weight: 700;
+}
+.purchase-category.refund-tag {
+  background: #dcfce7;
+  color: #15803d;
+  font-weight: 700;
+}
+.purchase-item.refund-item {
+  background: #f0fdf455;
+}
 .purchase-delete {
   width: 28px;
   height: 28px;
@@ -346,12 +358,20 @@
   background: transparent;
   color: #748078;
   font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 .purchase-value-mode button.selected {
   background: #fff;
   color: var(--green);
   font-weight: 800;
   box-shadow: 0 2px 7px #1c3b2e12;
+}
+.purchase-value-mode button.selected.refund-selected {
+  background: #ecfdf5;
+  color: #047857;
+  font-weight: 800;
+  box-shadow: 0 2px 7px #0596691a;
 }
 .purchase-value-mode small {
   color: var(--muted);

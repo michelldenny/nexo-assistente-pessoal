@@ -252,7 +252,8 @@ export async function POST(req: Request) {
         !card ||
         !description ||
         !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
-        total <= 0 ||
+        total === 0 ||
+        !Number.isSafeInteger(total) ||
         count < 1 ||
         count > 60
       )
@@ -273,7 +274,7 @@ export async function POST(req: Request) {
         .select()
         .single();
       if (error) throw error;
-      const base = Math.floor(total / count),
+      const base = Math.trunc(total / count),
         rem = total - base * count,
         first = firstMonth(date, card.closing_day),
         values = Array.from({ length: count }, (_, i) => ({
@@ -395,7 +396,8 @@ export async function PATCH(req: Request) {
       if (
         !description ||
         !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
-        total <= 0 ||
+        total === 0 ||
+        !Number.isSafeInteger(total) ||
         count < 1 ||
         count > 60
       )
@@ -410,7 +412,7 @@ export async function PATCH(req: Request) {
             .filter((part) => part.status === "paid")
             .map((part) => Number(part.installment_number)),
         ),
-        base = Math.floor(total / count),
+        base = Math.trunc(total / count),
         remainder = total - base * count,
         first = firstMonth(date, cardResult.data.closing_day),
         now = new Date().toISOString(),

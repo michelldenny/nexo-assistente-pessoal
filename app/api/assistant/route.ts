@@ -47,7 +47,7 @@ const functionDeclarations = [
   {
     name: "create_card_purchase",
     description:
-      "Cadastre imediatamente uma compra feita em um cartão de crédito. Use quando o usuário disser que gastou ou comprou em um cartão identificado.",
+      "Cadastre imediatamente uma compra ou estorno/crédito feito em um cartão de crédito. Use quando o usuário disser que gastou, comprou ou recebeu um estorno em um cartão identificado. Para estornos, utilize amount_cents negativo.",
     parameters: {
       type: "OBJECT",
       properties: {
@@ -57,7 +57,11 @@ const functionDeclarations = [
         },
         description: { type: "STRING" },
         category: { type: "STRING", enum: TRANSACTION_CATEGORIES },
-        amount_cents: { type: "INTEGER", minimum: 1 },
+        amount_cents: {
+          type: "INTEGER",
+          description:
+            "Valor em centavos. Positivo para compras/despesas e negativo para estornos/créditos.",
+        },
         purchase_date: { type: "STRING", description: "Data YYYY-MM-DD." },
         installment_count: { type: "INTEGER", minimum: 1, maximum: 60 },
       },
@@ -74,7 +78,7 @@ const functionDeclarations = [
   {
     name: "create_card_statement_purchases",
     description:
-      "Importe de uma só vez TODAS as compras identificadas em uma fatura ou extrato de cartão anexado. Use esta ferramenta, e não create_card_purchase, quando o usuário pedir para adicionar/importar a fatura inteira.",
+      "Importe de uma só vez TODAS as transações e estornos identificados em uma fatura ou extrato de cartão anexado. Para estornos/créditos, mantenha o valor amount_cents negativo.",
     parameters: {
       type: "OBJECT",
       properties: {
@@ -85,13 +89,17 @@ const functionDeclarations = [
         purchases: {
           type: "ARRAY",
           description:
-            "Lista completa de compras da fatura, sem incluir total, pagamentos ou saldo anterior.",
+            "Lista completa de transações da fatura (compras e estornos/créditos), sem incluir pagamentos de fatura ou saldo anterior.",
           items: {
             type: "OBJECT",
             properties: {
               description: { type: "STRING" },
               category: { type: "STRING", enum: TRANSACTION_CATEGORIES },
-              amount_cents: { type: "INTEGER", minimum: 1 },
+              amount_cents: {
+                type: "INTEGER",
+                description:
+                  "Valor em centavos. Positivo para compra e negativo para estorno/crédito.",
+              },
               purchase_date: {
                 type: "STRING",
                 description: "Data YYYY-MM-DD.",
@@ -318,7 +326,7 @@ export async function POST(request: Request) {
           (purchase) =>
             purchase.description?.trim() &&
             Number.isFinite(purchase.amount_cents) &&
-            purchase.amount_cents > 0 &&
+            purchase.amount_cents !== 0 &&
             /^\d{4}-\d{2}-\d{2}$/.test(purchase.purchase_date),
         )
         .map((purchase) => ({

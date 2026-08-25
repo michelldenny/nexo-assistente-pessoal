@@ -51,7 +51,7 @@ export async function createCardPurchase(input: {
     input.purchaseDate.slice(0, 7),
     Number(input.purchaseDate.slice(8, 10)) > card.closing_day ? 1 : 0,
   );
-  const base = Math.floor(input.totalCents / input.installmentCount);
+  const base = Math.trunc(input.totalCents / input.installmentCount);
   const remainder = input.totalCents - base * input.installmentCount;
   const installments = Array.from(
     { length: input.installmentCount },
@@ -129,7 +129,7 @@ export async function createCardPurchases(input: {
       purchase.purchase_date.slice(0, 7),
       Number(purchase.purchase_date.slice(8, 10)) > card.closing_day ? 1 : 0,
     );
-    const base = Math.floor(purchase.total_cents / purchase.installment_count);
+    const base = Math.trunc(purchase.total_cents / purchase.installment_count);
     const remainder = purchase.total_cents - base * purchase.installment_count;
     return Array.from({ length: purchase.installment_count }, (_, part) => ({
       purchase_id: created.id,
