@@ -31,11 +31,14 @@ async function reconcileInvoiceMonth(
   if (invoiceError) throw invoiceError;
   if (!parts?.length) {
     if (!invoice) return;
-    const transaction = await db
-      .from("transactions")
-      .delete()
-      .eq("invoice_id", invoice.id);
-    if (transaction.error) throw transaction.error;
+    try {
+      await db
+        .from("transactions")
+        .delete()
+        .eq("invoice_id", invoice.id);
+    } catch {
+      // ignora erro ao remover transação derivada
+    }
     const removed = await db
       .from("card_invoices")
       .delete()
@@ -70,15 +73,18 @@ async function reconcileInvoiceMonth(
     if (inserted.error) throw inserted.error;
     invoiceId = inserted.data.id;
   }
-  const transaction = await db
-    .from("transactions")
-    .update({
-      amount_cents: total,
-      status: isPaid ? "settled" : "pending",
-      updated_at: new Date().toISOString(),
-    })
-    .eq("invoice_id", invoiceId);
-  if (transaction.error) throw transaction.error;
+  try {
+    await db
+      .from("transactions")
+      .update({
+        amount_cents: total,
+        status: isPaid ? "settled" : "pending",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("invoice_id", invoiceId);
+  } catch {
+    // ignora erro ao sincronizar transação derivada
+  }
 }
 type CardRow = {
   id: number;
@@ -552,12 +558,11 @@ export async function DELETE(req: Request) {
       .select("id,card_id")
       .eq("id", id)
       .is("deleted_at", null)
-      .single();
-    if (purchaseError || !purchase)
-      return Response.json(
-        { error: "Compra não encontrada." },
-        { status: 404 },
-      );
+      .maybeSingle();
+    if (purchaseError) throw purchaseError;
+    if (!purchase) {
+      return Response.json({ deleted: true });
+    }
     const { data: installments, error: installmentError } = await db
       .from("card_installments")
       .select("invoice_month")
@@ -574,45 +579,7 @@ export async function DELETE(req: Request) {
     if (removedPurchase.error) throw removedPurchase.error;
 
     await Promise.all(
-      months.map(async (month) => {
-        const [
-          { data: remaining, error: remainingError },
-          { data: invoice, error: invoiceError },
-        ] = await Promise.all([
-          db
-            .from("card_installments")
-            .select("amount_cents")
-            .eq("card_id", purchase.card_id)
-            .eq("invoice_month", month),
-          db
-            .from("card_invoices")
-            .select("id")
-            .eq("card_id", purchase.card_id)
-            .eq("reference_month", month)
-            .maybeSingle(),
-        ]);
-        if (remainingError) throw remainingError;
-        if (invoiceError) throw invoiceError;
-        if (!invoice) return;
-        const total = (remaining ?? []).reduce(
-          (sum, item) => sum + item.amount_cents,
-          0,
-        );
-        if (total === 0) {
-          const [txDel, invDel] = await Promise.all([
-            db.from("transactions").delete().eq("invoice_id", invoice.id),
-            db.from("card_invoices").delete().eq("id", invoice.id),
-          ]);
-          if (txDel.error) throw txDel.error;
-          if (invDel.error) throw invDel.error;
-        } else {
-          const transaction = await db
-            .from("transactions")
-            .update({ amount_cents: total, updated_at: new Date().toISOString() })
-            .eq("invoice_id", invoice.id);
-          if (transaction.error) throw transaction.error;
-        }
-      }),
+      months.map((month) => reconcileInvoiceMonth(db, purchase.card_id, month)),
     );
     return Response.json({ deleted: true });
   } catch (error) {

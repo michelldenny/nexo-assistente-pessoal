@@ -406,13 +406,15 @@ export default function CardsView({
       installments: prev.installments.filter((i) => i.purchaseId !== item.id),
       debts: prev.debts.filter((d) => d.id !== item.id),
     }));
-    onNotice("Compra excluída.");
     try {
       const response = await fetch(`/api/cards?purchaseId=${item.id}`, {
         method: "DELETE",
       });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || "Não foi possível excluir.");
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(body.error || "Não foi possível excluir a transação.");
+      }
+      onNotice("Transação excluída.");
       void load();
     } catch (e) {
       setData(previousData);
