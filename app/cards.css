@@ -531,19 +531,47 @@
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 20px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 .debt-head {
   display: flex;
   justify-content: space-between;
-  gap: 15px;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 64px;
+  margin-bottom: 14px;
+}
+.debt-head > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.debt-head small {
+  font-size: 11px;
+  color: var(--muted);
+  display: block;
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .debt-head h3 {
-  margin: 4px 0 16px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .debt-actions-group {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
   flex-shrink: 0;
 }
 .debt-buttons {
@@ -556,21 +584,25 @@
   flex: 0 0 auto;
   flex-direction: column;
   align-items: flex-end;
-  gap: 3px;
+  gap: 2px;
 }
 .debt-progress-label strong {
   color: var(--green);
   font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 .debt-progress-label span {
   color: var(--muted);
   font-size: 10px;
+  white-space: nowrap;
 }
 .progress {
   height: 8px;
   background: #e7ece9;
   border-radius: 9px;
   overflow: hidden;
+  width: 100%;
 }
 .progress i {
   display: block;
@@ -583,6 +615,8 @@
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   margin-top: 18px;
+  margin-bottom: 14px;
+  min-height: 44px;
 }
 .debt-stats span {
   font-size: 10px;
@@ -594,12 +628,13 @@
 .debt-stats strong {
   font-size: 13px;
   color: var(--ink);
+  white-space: nowrap;
 }
 .debt-timeline {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 14px;
+  margin-top: auto;
   padding-top: 12px;
   border-top: 1px dashed var(--line);
   font-size: 11px;
@@ -609,6 +644,7 @@
   display: flex;
   align-items: center;
   gap: 5px;
+  white-space: nowrap;
 }
 .debt-timeline strong {
   color: var(--ink);
