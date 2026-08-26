@@ -378,12 +378,49 @@
   font-size: 9px;
   line-height: 1.4;
 }
+.chart-section-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+.chart-year-selector {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 3px;
+}
+.chart-year-selector button {
+  border: 0;
+  background: none;
+  color: var(--green);
+  font-size: 20px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s ease;
+}
+.chart-year-selector button:hover {
+  background: #f0f5f1;
+}
+.chart-year-selector strong {
+  min-width: 58px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 750;
+  color: var(--ink);
+}
 .cards-chart {
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 24px;
   overflow-x: auto;
+  box-shadow: 0 4px 18px rgba(23, 33, 28, 0.03);
 }
 .chart-bars {
   min-width: 520px;
@@ -393,22 +430,50 @@
   gap: clamp(12px, 3vw, 30px);
   padding-top: 12px;
 }
+.chart-bars.chart-bars-14 {
+  min-width: 680px;
+  gap: clamp(6px, 1.4vw, 14px);
+}
 .chart-column {
-  min-width: 68px;
+  min-width: 42px;
   flex: 1;
   display: grid;
   grid-template-rows: 30px 1fr 24px;
   gap: 7px;
   text-align: center;
+  cursor: pointer;
+  padding: 4px 2px;
+  border-radius: 10px;
+  transition: background 0.15s ease;
+}
+.chart-column:hover {
+  background: #f4f8f4;
+}
+.chart-column.chart-column-active {
+  background: #eaf5ee;
+}
+.chart-column.chart-column-active strong {
+  color: var(--green);
+  font-weight: 800;
+}
+.chart-column.chart-column-active span {
+  color: var(--green);
+  font-weight: 800;
+}
+.chart-column.chart-column-edge span {
+  font-size: 9px;
+  color: #8a968f;
 }
 .chart-column strong {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--ink);
+  white-space: nowrap;
 }
 .chart-column span {
   font-size: 10px;
   color: var(--muted);
   text-transform: capitalize;
+  white-space: nowrap;
 }
 .chart-track {
   min-height: 150px;
@@ -425,10 +490,11 @@
 }
 .chart-track i {
   display: block;
-  width: min(42px, 70%);
-  min-height: 7px;
+  width: min(38px, 75%);
+  min-height: 4px;
   border-radius: 8px 8px 3px 3px;
   background: linear-gradient(180deg, #79b895, var(--green));
+  transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .invoice-list {
   display: grid;

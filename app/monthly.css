@@ -28,10 +28,12 @@
 .entry-status {
   border: 0;
   border-radius: 15px;
-  padding: 6px 9px;
+  padding: 6px 10px;
   font-size: 9px;
   font-weight: 800;
   white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 .entry-status.pending.income {
   background: #e9f3ff;
@@ -277,6 +279,11 @@
 .content-grid.finance-view {
   grid-template-columns: minmax(0, 1fr);
 }
+.content-grid.finance-view .main-column {
+  max-width: 980px;
+  margin: 0 auto;
+  width: 100%;
+}
 .content-grid.finance-view .assistant-card {
   display: none;
 }
@@ -289,6 +296,12 @@
 }
 .content-grid.assistant-view .assistant-card {
   min-height: 680px;
+}
+
+@media (max-width: 920px) {
+  .summary-cards-grid {
+    grid-template-columns: 1fr;
+  }
 }
 .recurrence-delete-actions {
   display: grid;

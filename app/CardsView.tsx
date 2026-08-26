@@ -147,15 +147,25 @@ export default function CardsView({
     [saving, setSaving] = useState(false);
   const [debtSort, setDebtSort] = useState<DebtSort>("newest");
   const [showCompletedDebts, setShowCompletedDebts] = useState(false);
+  const [chartYear, setChartYear] = useState(() =>
+    Number((selectedMonth || today()).slice(0, 4)),
+  );
   const [purchaseSort, setPurchaseSort] = useState<PurchaseSort>({
     field: "date",
     direction: "desc",
   });
   const [card, setCard] = useState(emptyCard),
     [purchase, setPurchase] = useState(emptyPurchase);
+
+  const sortedCards = useMemo(() => {
+    return [...data.cards].sort((a, b) =>
+      a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }),
+    );
+  }, [data.cards]);
+
   const cardMap = useMemo(
-    () => Object.fromEntries(data.cards.map((c) => [c.id, c])),
-    [data.cards],
+    () => Object.fromEntries(sortedCards.map((c) => [c.id, c])),
+    [sortedCards],
   );
   const sortedDebts = useMemo(() => {
     const dateKey = (debt: Debt) =>
@@ -454,7 +464,7 @@ export default function CardsView({
               }
             >
               <option value="">Selecione</option>
-              {data.cards.map((c) => (
+              {sortedCards.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} · {c.lastFour}
                 </option>
@@ -767,16 +777,47 @@ export default function CardsView({
       </>
     );
   }
-  const monthlyTotals = Object.entries(
-    data.invoices
-      .filter((invoice) => invoice.totalCents !== 0)
-      .reduce<Record<string, number>>((totals, invoice) => {
+  const fourteenMonths = useMemo(() => {
+    const list: string[] = [`${chartYear - 1}-12`];
+    for (let m = 1; m <= 12; m++) {
+      list.push(`${chartYear}-${String(m).padStart(2, "0")}`);
+    }
+    list.push(`${chartYear + 1}-01`);
+    return list;
+  }, [chartYear]);
+
+  const invoiceTotalsMap = useMemo(() => {
+    const totals: Record<string, number> = {};
+    for (const invoice of data.invoices) {
+      if (invoice.totalCents !== 0) {
         totals[invoice.referenceMonth] =
           (totals[invoice.referenceMonth] ?? 0) + invoice.totalCents;
-        return totals;
-      }, {}),
-  ).sort(([a], [b]) => a.localeCompare(b));
-  const chartMax = Math.max(...monthlyTotals.map(([, total]) => total), 1);
+      }
+    }
+    return totals;
+  }, [data.invoices]);
+
+  const fourteenMonthsTotals = useMemo(() => {
+    return fourteenMonths.map((chartMonth) => {
+      const total = invoiceTotalsMap[chartMonth] ?? 0;
+      const isPrevYear = chartMonth.startsWith(String(chartYear - 1));
+      const isNextYear = chartMonth.startsWith(String(chartYear + 1));
+      const isSelected = chartMonth === activeMonth;
+      return {
+        month: chartMonth,
+        total,
+        isPrevYear,
+        isNextYear,
+        isSelected,
+      };
+    });
+  }, [fourteenMonths, invoiceTotalsMap, chartYear, activeMonth]);
+
+  const chartMax = Math.max(
+    ...fourteenMonthsTotals.map((item) => item.total),
+    1,
+  );
+
   return (
     <>
       <div className="agenda-toolbar">
@@ -788,14 +829,14 @@ export default function CardsView({
           <button onClick={openNewCard}>＋ Cadastrar cartão</button>
           <button
             className="primary"
-            disabled={!data.cards.length}
+            disabled={!sortedCards.length}
             onClick={() => openNewPurchase()}
           >
             ＋ Nova compra
           </button>
         </div>
       </div>
-      {!data.cards.length ? (
+      {!sortedCards.length ? (
         <div className="agenda-empty">
           <strong>Cadastre seu primeiro cartão.</strong>
           <small>Informe limite, fechamento e vencimento.</small>
@@ -803,7 +844,7 @@ export default function CardsView({
         </div>
       ) : (
         <div className="cards-grid">
-          {data.cards.map((c) => {
+          {sortedCards.map((c) => {
             const cardInvoices = data.invoices.filter(
                 (invoice) => invoice.cardId === c.id && invoice.totalCents !== 0,
               ),
@@ -888,37 +929,89 @@ export default function CardsView({
           })}
         </div>
       )}
-      <div className="section-title">
+      <div className="section-title chart-section-title">
         <div>
-          <p className="eyebrow">EVOLUÇÃO MENSAL</p>
+          <p className="eyebrow">EVOLUÇÃO MENSAL (14 MESES)</p>
           <h3>Total de todos os cartões</h3>
+        </div>
+        <div className="chart-year-selector" aria-label="Seletor de ano das faturas">
+          <button
+            type="button"
+            onClick={() => setChartYear((y) => y - 1)}
+            aria-label="Ano anterior"
+            title="Ano anterior"
+          >
+            ‹
+          </button>
+          <strong>{chartYear}</strong>
+          <button
+            type="button"
+            onClick={() => setChartYear((y) => y + 1)}
+            aria-label="Próximo ano"
+            title="Próximo ano"
+          >
+            ›
+          </button>
         </div>
       </div>
       <section
         className="cards-chart"
-        aria-label="Total mensal das faturas de todos os cartões"
+        aria-label={`Total mensal das faturas de todos os cartões no período de 14 meses em torno de ${chartYear}`}
       >
-        {monthlyTotals.length ? (
-          <div className="chart-bars">
-            {monthlyTotals.map(([chartMonth, total]) => (
-              <div className="chart-column" key={chartMonth}>
-                <strong>{money(total)}</strong>
+        <div className="chart-bars chart-bars-14">
+          {fourteenMonthsTotals.map((item) => {
+            const [y, m] = item.month.split("-");
+            const shortMonths = [
+              "",
+              "Jan",
+              "Fev",
+              "Mar",
+              "Abr",
+              "Mai",
+              "Jun",
+              "Jul",
+              "Ago",
+              "Set",
+              "Out",
+              "Nov",
+              "Dez",
+            ];
+            const label = item.isPrevYear
+              ? `Dez/${y.slice(2)}`
+              : item.isNextYear
+                ? `Jan/${y.slice(2)}`
+                : shortMonths[Number(m)] ?? m;
+
+            return (
+              <div
+                className={`chart-column ${item.isSelected ? "chart-column-active" : ""} ${item.isPrevYear || item.isNextYear ? "chart-column-edge" : ""}`}
+                key={item.month}
+                onClick={() => onMonthChange?.(item.month)}
+                role="button"
+                tabIndex={0}
+                title={`${formatMonth(item.month)}: ${money(item.total)}`}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ")
+                    onMonthChange?.(item.month);
+                }}
+              >
+                <strong>{item.total > 0 ? money(item.total) : "—"}</strong>
                 <div className="chart-track">
                   <i
                     style={{
-                      height: `${Math.max(7, (total / chartMax) * 100)}%`,
+                      height:
+                        item.total > 0
+                          ? `${Math.max(8, (item.total / chartMax) * 100)}%`
+                          : "3px",
+                      opacity: item.total > 0 ? 1 : 0.25,
                     }}
                   />
                 </div>
-                <span>{formatMonth(chartMonth)}</span>
+                <span>{label}</span>
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="agenda-empty">
-            <strong>Ainda não há valores para o gráfico.</strong>
-          </div>
-        )}
+            );
+          })}
+        </div>
       </section>
       {cardModal && (
         <div className="modal-backdrop">

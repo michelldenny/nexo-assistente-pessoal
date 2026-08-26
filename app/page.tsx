@@ -90,6 +90,10 @@ export default function Home() {
   const [importOpen, setImportOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [monthlyCashflow, setMonthlyCashflow] = useState<
+    Record<string, { incomeCents: number; expenseCents: number }>
+  >({});
+
   useEffect(() => {
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
@@ -130,7 +134,12 @@ export default function Home() {
           );
           const body = await response.json();
           if (!response.ok) throw new Error(body.error);
-          if (!signal?.aborted) setEntries(body.transactions);
+          if (!signal?.aborted) {
+            setEntries(body.transactions ?? []);
+            if (body.monthlyCashflow) {
+              setMonthlyCashflow(body.monthlyCashflow);
+            }
+          }
           return;
         } catch (error) {
           if (error instanceof DOMException && error.name === "AbortError")
@@ -159,6 +168,66 @@ export default function Home() {
     }),
     [entries],
   );
+
+  const categoryExpenses = useMemo(() => {
+    const expenseEntries = entries.filter((e) => e.kind === "expense");
+    const grouped: Record<string, { totalCents: number; count: number }> = {};
+    for (const entry of expenseEntries) {
+      const cat = entry.category || "Outros";
+      if (!grouped[cat]) {
+        grouped[cat] = { totalCents: 0, count: 0 };
+      }
+      grouped[cat].totalCents += entry.amountCents;
+      grouped[cat].count += 1;
+    }
+    const totalExp = totals.expense;
+    return Object.entries(grouped)
+      .map(([category, item]) => ({
+        category,
+        totalCents: item.totalCents,
+        count: item.count,
+        percent:
+          totalExp > 0 ? Math.round((item.totalCents / totalExp) * 100) : 0,
+      }))
+      .sort((a, b) => b.totalCents - a.totalCents);
+  }, [entries, totals.expense]);
+
+  const currentYear = Number(month.slice(0, 4));
+  const cashflowMonths = useMemo(() => {
+    const monthsList: string[] = [`${currentYear - 1}-12`];
+    for (let m = 1; m <= 12; m++) {
+      monthsList.push(`${currentYear}-${String(m).padStart(2, "0")}`);
+    }
+    monthsList.push(`${currentYear + 1}-01`);
+    return monthsList;
+  }, [currentYear]);
+
+  const cashflowBars = useMemo(() => {
+    return cashflowMonths.map((m) => {
+      const data =
+        m === month
+          ? {
+              incomeCents: totals.income,
+              expenseCents: totals.expense,
+            }
+          : monthlyCashflow[m] ?? { incomeCents: 0, expenseCents: 0 };
+      return {
+        month: m,
+        incomeCents: data.incomeCents,
+        expenseCents: data.expenseCents,
+        isSelected: m === month,
+      };
+    });
+  }, [cashflowMonths, monthlyCashflow, month, totals]);
+
+  const cashflowMax = useMemo(() => {
+    let max = 1;
+    for (const b of cashflowBars) {
+      if (b.incomeCents > max) max = b.incomeCents;
+      if (b.expenseCents > max) max = b.expenseCents;
+    }
+    return max;
+  }, [cashflowBars]);
 
   function openNew(prefill?: Partial<Draft>) {
     setEditingId(null);
@@ -294,15 +363,15 @@ export default function Home() {
 
   function statusLabel(entry: Entry) {
     if (entry.status === "settled")
-      return entry.kind === "income" ? "Recebido" : "Pago";
+      return entry.kind === "income" ? "RECEBIDO" : "PAGO";
     const overdue = entry.occurredOn < today();
     return entry.kind === "income"
       ? overdue
-        ? "Atrasado"
-        : "A receber"
+        ? "ATRASADO"
+        : "A RECEBER"
       : overdue
-        ? "Vencido"
-        : "A Pagar";
+        ? "VENCIDO"
+        : "A PAGAR";
   }
 
   async function sendMessage(text = message) {
@@ -537,139 +606,314 @@ export default function Home() {
             className={`content-grid ${tab === "Assistente" ? "assistant-view" : "finance-view"}`}
           >
             <section className="main-column">
-              <article className="balance-card">
-                <div className="balance-head">
-                  <div>
-                    <p>Saldo projetado de {monthLabel(month)}</p>
-                    <h2>{money(totals.income - totals.expense)}</h2>
-                  </div>
-                  <span className="status-pill">● Visão mensal</span>
-                </div>
-                <div className="mini-stats">
-                  <div>
-                    <span className="dot income" />
-                    Receitas<strong>{money(totals.income)}</strong>
-                  </div>
-                  <div>
-                    <span className="dot expense" />
-                    Despesas<strong>{money(totals.expense)}</strong>
-                  </div>
-                  <div
-                    className="spark-bars"
-                    aria-label="Movimento ilustrativo"
-                  >
-                    {[38, 52, 44, 67, 58, 76, 49, 86, 64, 74, 92, 81].map(
-                      (h, i) => (
-                        <i key={i} style={{ height: `${h}%` }} />
-                      ),
-                    )}
-                  </div>
-                </div>
-              </article>
-
-              <div className="section-title">
-                <div>
-                  <p className="eyebrow">MOVIMENTAÇÃO</p>
-                  <h3>
-                    {tab === "Financeiro"
-                      ? "Todos os lançamentos"
-                      : "Últimos lançamentos"}
-                  </h3>
-                </div>
-                <button
-                  onClick={() =>
-                    setTab(tab === "Financeiro" ? "Visão geral" : "Financeiro")
-                  }
-                >
-                  {tab === "Financeiro" ? "Ver resumo" : "Ver todos"} →
-                </button>
-              </div>
-              <div className="transactions">
-                {loading ? (
-                  <div className="empty-state">
-                    Carregando seus lançamentos…
-                  </div>
-                ) : entries.length === 0 ? (
-                  <div className="empty-state">
-                    <strong>Seu financeiro começa aqui.</strong>
-                    <span>
-                      Registre a primeira receita ou despesa pelo botão acima ou
-                      pelo assistente.
+              <section className="summary-cards-grid" aria-label="Resumo financeiro mensal">
+                <article className="summary-card income-card">
+                  <div className="summary-card-header">
+                    <span className="summary-card-pill income">
+                      <span className="dot income" /> RECEITAS
                     </span>
-                    <button onClick={() => openNew()}>
-                      Criar primeiro lançamento
+                    <span className="summary-card-icon income">↓</span>
+                  </div>
+                  <div className="summary-card-body">
+                    <small>Total de entradas</small>
+                    <h2 className="income-val">{money(totals.income)}</h2>
+                  </div>
+                  <div className="summary-card-footer">
+                    <span>Previsto em {monthLabel(month)}</span>
+                  </div>
+                </article>
+
+                <article className="summary-card expense-card">
+                  <div className="summary-card-header">
+                    <span className="summary-card-pill expense">
+                      <span className="dot expense" /> DESPESAS
+                    </span>
+                    <span className="summary-card-icon expense">↑</span>
+                  </div>
+                  <div className="summary-card-body">
+                    <small>Total de saídas</small>
+                    <h2 className="expense-val">{money(totals.expense)}</h2>
+                  </div>
+                  <div className="summary-card-footer">
+                    <span>Contas e despesas do mês</span>
+                  </div>
+                </article>
+
+                <article className="summary-card balance-card-new">
+                  <div className="summary-card-header">
+                    <span className="summary-card-pill balance">
+                      <span className="dot balance" /> SALDO
+                    </span>
+                    <span className="summary-card-badge">
+                      {totals.income >= totals.expense ? "● Positivo" : "● Atenção"}
+                    </span>
+                  </div>
+                  <div className="summary-card-body">
+                    <small>Saldo projetado</small>
+                    <h2 className={totals.income >= totals.expense ? "positive-val" : "negative-val"}>
+                      {totals.income < totals.expense ? "− " : ""}
+                      {money(totals.income - totals.expense)}
+                    </h2>
+                  </div>
+                  <div className="summary-card-footer">
+                    <span>Receitas menos despesas</span>
+                  </div>
+                </article>
+              </section>
+
+              {tab === "Visão geral" ? (
+                <>
+                  <div className="section-title">
+                    <div>
+                      <p className="eyebrow">DISTRIBUIÇÃO</p>
+                      <h3>Gastos por categoria</h3>
+                    </div>
+                    <button onClick={() => setTab("Financeiro")}>
+                      Ver lançamentos →
                     </button>
                   </div>
-                ) : (
-                  entries
-                    .slice(0, tab === "Financeiro" ? 200 : 5)
-                    .map((entry) => (
-                      <div
-                        className={`transaction ${entry.kind}`}
-                        key={entry.id}
-                      >
-                        <div
-                          className={`transaction-icon ${entry.kind}`}
-                          style={{
-                            background:
-                              entry.kind === "income"
-                                ? "#e8f7ee"
-                                : `${CATEGORY_COLORS[entry.category] ?? CATEGORY_COLORS.Outros}18`,
-                            color:
-                              entry.kind === "income"
-                                ? "#168565"
-                                : (CATEGORY_COLORS[entry.category] ??
-                                  CATEGORY_COLORS.Outros),
-                          }}
-                        >
-                          {entry.kind === "income" ? "↓" : "↑"}
-                        </div>
-                        <div className="transaction-copy">
-                          <div className="transaction-header-line">
-                            <strong>{entry.description}</strong>
-                            <span className={`kind-pill ${entry.kind}`}>
-                              {entry.kind === "income" ? "Receita" : "Despesa"}
-                            </span>
-                          </div>
-                          <small>
-                            {entry.category} · {displayDate(entry.occurredOn)}
-                            {entry.source === "assistant"
-                              ? " · via assistente"
-                              : ""}
-                          </small>
-                        </div>
-                        <strong className={`transaction-amount ${entry.kind}`}>
-                          {entry.kind === "income" ? "+ " : "− "}
-                          {money(entry.amountCents)}
-                        </strong>
-                        <button
-                          className={`entry-status ${entry.status} ${entry.kind}`}
-                          onClick={() => void toggleStatus(entry)}
-                        >
-                          {statusLabel(entry)}
+                  <div className="category-expenses-card">
+                    {loading ? (
+                      <div className="empty-state">Carregando gastos por categoria…</div>
+                    ) : categoryExpenses.length === 0 ? (
+                      <div className="empty-state">
+                        <strong>Nenhum gasto registrado em {monthLabel(month)}.</strong>
+                        <span>
+                          Adicione despesas para acompanhar a distribuição por categorias.
+                        </span>
+                        <button onClick={() => openNew({ kind: "expense", occurredOn: `${month}-01` })}>
+                          ＋ Registrar despesa
                         </button>
-                        <div className="row-actions">
-                          <button
-                            className="icon-action"
-                            onClick={() => openEdit(entry)}
-                            aria-label={`Editar ${entry.description}`}
-                            title="Editar"
-                          >
-                            ✎
-                          </button>
-                          <button
-                            className="danger icon-action"
-                            onClick={() => setEntryToDelete(entry)}
-                            aria-label={`Excluir ${entry.description}`}
-                            title="Excluir"
-                          >
-                            🗑
-                          </button>
-                        </div>
                       </div>
-                    ))
-                )}
-              </div>
+                    ) : (
+                      <div className="category-list">
+                        {categoryExpenses.map((item) => {
+                          const catColor =
+                            CATEGORY_COLORS[item.category] || CATEGORY_COLORS.Outros;
+                          return (
+                            <div className="category-item" key={item.category}>
+                              <div className="category-info-header">
+                                <div className="category-name-group">
+                                  <span
+                                    className="category-badge-dot"
+                                    style={{ backgroundColor: catColor }}
+                                  />
+                                  <strong>{item.category}</strong>
+                                  <small className="category-count">
+                                    {item.count} {item.count === 1 ? "despesa" : "despesas"}
+                                  </small>
+                                </div>
+                                <div className="category-amount-group">
+                                  <strong>{money(item.totalCents)}</strong>
+                                  <span className="category-percent-tag">
+                                    {item.percent}%
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="category-progress-track">
+                                <i
+                                  style={{
+                                    width: `${Math.max(4, item.percent)}%`,
+                                    backgroundColor: catColor,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="section-title chart-section-title">
+                    <div>
+                      <p className="eyebrow">FLUXO FINANCEIRO (14 MESES)</p>
+                      <h3>Entradas e saídas</h3>
+                    </div>
+                    <div className="cashflow-legend">
+                      <span className="legend-item income">
+                        <i /> Entradas
+                      </span>
+                      <span className="legend-item expense">
+                        <i /> Saídas
+                      </span>
+                    </div>
+                  </div>
+                  <section
+                    className="cashflow-chart-card"
+                    aria-label="Gráfico comparativo de entradas e saídas ao longo dos meses"
+                  >
+                    <div className="cashflow-bars-container">
+                      {cashflowBars.map((item) => {
+                        const [y, m] = item.month.split("-");
+                        const shortMonths = [
+                          "",
+                          "Jan",
+                          "Fev",
+                          "Mar",
+                          "Abr",
+                          "Mai",
+                          "Jun",
+                          "Jul",
+                          "Ago",
+                          "Set",
+                          "Out",
+                          "Nov",
+                          "Dez",
+                        ];
+                        const isPrev = item.month.startsWith(String(currentYear - 1));
+                        const isNext = item.month.startsWith(String(currentYear + 1));
+                        const label = isPrev
+                          ? `Dez/${y.slice(2)}`
+                          : isNext
+                            ? `Jan/${y.slice(2)}`
+                            : shortMonths[Number(m)] ?? m;
+
+                        const incHeight =
+                          item.incomeCents > 0
+                            ? Math.max(6, (item.incomeCents / cashflowMax) * 100)
+                            : 0;
+                        const expHeight =
+                          item.expenseCents > 0
+                            ? Math.max(6, (item.expenseCents / cashflowMax) * 100)
+                            : 0;
+
+                        return (
+                          <div
+                            className={`cashflow-column ${item.isSelected ? "active" : ""} ${isPrev || isNext ? "edge-column" : ""}`}
+                            key={item.month}
+                            onClick={() => setMonth(item.month)}
+                            role="button"
+                            tabIndex={0}
+                            title={`${formatMonth(item.month)}\nEntradas: ${money(item.incomeCents)}\nSaídas: ${money(item.expenseCents)}`}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") setMonth(item.month);
+                            }}
+                          >
+                            <div className="cashflow-bars-pair">
+                              <div className="cashflow-bar-wrapper">
+                                <div
+                                  className="cashflow-bar income-bar"
+                                  style={{
+                                    height: `${incHeight}%`,
+                                    opacity: item.incomeCents > 0 ? 1 : 0.2,
+                                  }}
+                                />
+                              </div>
+                              <div className="cashflow-bar-wrapper">
+                                <div
+                                  className="cashflow-bar expense-bar"
+                                  style={{
+                                    height: `${expHeight}%`,
+                                    opacity: item.expenseCents > 0 ? 1 : 0.2,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                            <span className="cashflow-label">{label}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                </>
+              ) : (
+                <>
+                  <div className="section-title">
+                    <div>
+                      <p className="eyebrow">MOVIMENTAÇÃO</p>
+                      <h3>Todos os lançamentos</h3>
+                    </div>
+                    <button onClick={() => setTab("Visão geral")}>
+                      Ver resumo →
+                    </button>
+                  </div>
+                  <div className="transactions finance-transactions">
+                    {loading ? (
+                      <div className="empty-state">
+                        Carregando seus lançamentos…
+                      </div>
+                    ) : entries.length === 0 ? (
+                      <div className="empty-state">
+                        <strong>Seu financeiro começa aqui.</strong>
+                        <span>
+                          Registre a primeira receita ou despesa pelo botão acima ou
+                          pelo assistente.
+                        </span>
+                        <button onClick={() => openNew()}>
+                          Criar primeiro lançamento
+                        </button>
+                      </div>
+                    ) : (
+                      entries.map((entry) => (
+                        <div
+                          className={`transaction ${entry.kind}`}
+                          key={entry.id}
+                        >
+                          <div
+                            className={`transaction-icon ${entry.kind}`}
+                            style={{
+                              background:
+                                entry.kind === "income"
+                                  ? "#e8f7ee"
+                                  : `${CATEGORY_COLORS[entry.category] ?? CATEGORY_COLORS.Outros}18`,
+                              color:
+                                entry.kind === "income"
+                                  ? "#168565"
+                                  : (CATEGORY_COLORS[entry.category] ??
+                                    CATEGORY_COLORS.Outros),
+                            }}
+                          >
+                            {entry.kind === "income" ? "↓" : "↑"}
+                          </div>
+                          <div className="transaction-copy">
+                            <div className="transaction-header-line">
+                              <strong>{entry.description}</strong>
+                              <span className={`kind-pill ${entry.kind}`}>
+                                {entry.kind === "income" ? "Receita" : "Despesa"}
+                              </span>
+                            </div>
+                            <small>
+                              {entry.category} · {displayDate(entry.occurredOn)}
+                              {entry.source === "assistant"
+                                ? " · via assistente"
+                                : ""}
+                            </small>
+                          </div>
+                          <strong className={`transaction-amount ${entry.kind}`}>
+                            {entry.kind === "income" ? "+ " : "− "}
+                            {money(entry.amountCents)}
+                          </strong>
+                          <button
+                            className={`entry-status ${entry.status} ${entry.kind}`}
+                            onClick={() => void toggleStatus(entry)}
+                          >
+                            {statusLabel(entry)}
+                          </button>
+                          <div className="row-actions">
+                            <button
+                              className="icon-action"
+                              onClick={() => openEdit(entry)}
+                              aria-label={`Editar ${entry.description}`}
+                              title="Editar"
+                            >
+                              ✎
+                            </button>
+                            <button
+                              className="danger icon-action"
+                              onClick={() => setEntryToDelete(entry)}
+                              aria-label={`Excluir ${entry.description}`}
+                              title="Excluir"
+                            >
+                              🗑
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
             </section>
 
             <aside className="assistant-card">

@@ -66,7 +66,35 @@ export async function GET(req: Request) {
       .order("occurred_on", { ascending: false })
       .order("id", { ascending: false });
     if (error) throw error;
-    return Response.json({ transactions: (data ?? []).map((r) => camel(r)) });
+
+    const year = Number(month.slice(0, 4));
+    const rangeStart = `${year - 1}-12-01`;
+    const rangeEnd = `${year + 1}-02-01`;
+
+    const { data: flowData } = await getSupabase()
+      .from("transactions")
+      .select("occurred_on,amount_cents,kind")
+      .is("deleted_at", null)
+      .gte("occurred_on", rangeStart)
+      .lt("occurred_on", rangeEnd);
+
+    const monthlyCashflow: Record<string, { incomeCents: number; expenseCents: number }> = {};
+    for (const item of flowData ?? []) {
+      const itemMonth = item.occurred_on.slice(0, 7);
+      if (!monthlyCashflow[itemMonth]) {
+        monthlyCashflow[itemMonth] = { incomeCents: 0, expenseCents: 0 };
+      }
+      if (item.kind === "income") {
+        monthlyCashflow[itemMonth].incomeCents += Number(item.amount_cents) || 0;
+      } else {
+        monthlyCashflow[itemMonth].expenseCents += Number(item.amount_cents) || 0;
+      }
+    }
+
+    return Response.json({
+      transactions: (data ?? []).map((r) => camel(r)),
+      monthlyCashflow,
+    });
   } catch (e) {
     console.error("Failed to load monthly transactions", e);
     return Response.json(
