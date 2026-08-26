@@ -235,6 +235,48 @@ export default function CardsView({
     selectedMonth,
   ]);
   const activeMonth = selectedMonth || today().slice(0, 7);
+
+  const fourteenMonths = useMemo(() => {
+    const list: string[] = [`${chartYear - 1}-12`];
+    for (let m = 1; m <= 12; m++) {
+      list.push(`${chartYear}-${String(m).padStart(2, "0")}`);
+    }
+    list.push(`${chartYear + 1}-01`);
+    return list;
+  }, [chartYear]);
+
+  const invoiceTotalsMap = useMemo(() => {
+    const totals: Record<string, number> = {};
+    for (const invoice of data.invoices) {
+      if (invoice.totalCents !== 0) {
+        totals[invoice.referenceMonth] =
+          (totals[invoice.referenceMonth] ?? 0) + invoice.totalCents;
+      }
+    }
+    return totals;
+  }, [data.invoices]);
+
+  const fourteenMonthsTotals = useMemo(() => {
+    return fourteenMonths.map((chartMonth) => {
+      const total = invoiceTotalsMap[chartMonth] ?? 0;
+      const isPrevYear = chartMonth.startsWith(String(chartYear - 1));
+      const isNextYear = chartMonth.startsWith(String(chartYear + 1));
+      const isSelected = chartMonth === activeMonth;
+      return {
+        month: chartMonth,
+        total,
+        isPrevYear,
+        isNextYear,
+        isSelected,
+      };
+    });
+  }, [fourteenMonths, invoiceTotalsMap, chartYear, activeMonth]);
+
+  const chartMax = Math.max(
+    ...fourteenMonthsTotals.map((item) => item.total),
+    1,
+  );
+
   async function load() {
     try {
       const r = await fetch("/api/cards", { cache: "no-store" }),
@@ -777,46 +819,6 @@ export default function CardsView({
       </>
     );
   }
-  const fourteenMonths = useMemo(() => {
-    const list: string[] = [`${chartYear - 1}-12`];
-    for (let m = 1; m <= 12; m++) {
-      list.push(`${chartYear}-${String(m).padStart(2, "0")}`);
-    }
-    list.push(`${chartYear + 1}-01`);
-    return list;
-  }, [chartYear]);
-
-  const invoiceTotalsMap = useMemo(() => {
-    const totals: Record<string, number> = {};
-    for (const invoice of data.invoices) {
-      if (invoice.totalCents !== 0) {
-        totals[invoice.referenceMonth] =
-          (totals[invoice.referenceMonth] ?? 0) + invoice.totalCents;
-      }
-    }
-    return totals;
-  }, [data.invoices]);
-
-  const fourteenMonthsTotals = useMemo(() => {
-    return fourteenMonths.map((chartMonth) => {
-      const total = invoiceTotalsMap[chartMonth] ?? 0;
-      const isPrevYear = chartMonth.startsWith(String(chartYear - 1));
-      const isNextYear = chartMonth.startsWith(String(chartYear + 1));
-      const isSelected = chartMonth === activeMonth;
-      return {
-        month: chartMonth,
-        total,
-        isPrevYear,
-        isNextYear,
-        isSelected,
-      };
-    });
-  }, [fourteenMonths, invoiceTotalsMap, chartYear, activeMonth]);
-
-  const chartMax = Math.max(
-    ...fourteenMonthsTotals.map((item) => item.total),
-    1,
-  );
 
   return (
     <>
