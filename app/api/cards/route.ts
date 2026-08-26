@@ -145,6 +145,17 @@ export async function GET() {
           .reduce((s: number, x) => s + x.amountCents, 0),
       }))
       .sort((a, b) => b.referenceMonth.localeCompare(a.referenceMonth));
+
+    const invoiceStatusMap = new Map<string, "open" | "paid">();
+    for (const inv of invoices) {
+      invoiceStatusMap.set(`${inv.cardId}:${inv.referenceMonth}`, inv.status);
+    }
+
+    const isInstallmentPaid = (x: InstallmentRow) => {
+      const invStatus = invoiceStatusMap.get(`${x.cardId}:${x.invoiceMonth}`);
+      return invStatus === "paid";
+    };
+
     const debts = purchases
       .filter((p) => Number(p.installmentCount) > 1)
       .map((p) => {
@@ -153,7 +164,8 @@ export async function GET() {
           .sort(
             (a, b) => Number(a.installmentNumber) - Number(b.installmentNumber),
           );
-        const paid = parts.filter((i) => i.status === "paid");
+        // Uma parcela só é considerada paga se a fatura do cartão para aquele mês estiver com status "paid"
+        const paid = parts.filter(isInstallmentPaid);
         const startMonth =
           typeof parts[0]?.invoiceMonth === "string"
             ? parts[0].invoiceMonth
@@ -168,6 +180,7 @@ export async function GET() {
         return {
           ...p,
           startDate: p.purchaseDate,
+          purchaseDate: p.purchaseDate,
           startMonth,
           endMonth,
           paidInstallments: paid.length,
