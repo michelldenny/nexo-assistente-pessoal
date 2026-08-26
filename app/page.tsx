@@ -89,7 +89,9 @@ export default function Home() {
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+  const [isListening, setIsListening] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   const [monthlyCashflow, setMonthlyCashflow] = useState<
     Record<string, { incomeCents: number; expenseCents: number }>
@@ -465,6 +467,72 @@ export default function Home() {
       );
     } finally {
       setAttachmentBusy(false);
+    }
+  }
+
+  function toggleListening() {
+    if (isListening) {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {}
+      }
+      setIsListening(false);
+      return;
+    }
+
+    if (typeof window === "undefined") return;
+
+    const SpeechRecognitionClass =
+      (window as unknown as { SpeechRecognition?: any; webkitSpeechRecognition?: any })
+        .SpeechRecognition ||
+      (window as unknown as { SpeechRecognition?: any; webkitSpeechRecognition?: any })
+        .webkitSpeechRecognition;
+
+    if (!SpeechRecognitionClass) {
+      setNotice(
+        "Reconhecimento de voz não suportado neste navegador. Experimente no Chrome, Edge ou Safari.",
+      );
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognitionClass();
+      recognition.lang = "pt-BR";
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        let currentText = "";
+        for (let i = 0; i < event.results.length; i++) {
+          currentText += event.results[i][0].transcript;
+        }
+        if (currentText) {
+          setMessage(currentText);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        setIsListening(false);
+        if (event.error === "not-allowed") {
+          setNotice("Permissão de microfone negada. Permita o microfone no navegador.");
+        }
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      console.error(err);
+      setIsListening(false);
+      setNotice("Não foi possível iniciar o microfone.");
     }
   }
 
@@ -1101,7 +1169,20 @@ export default function Home() {
                   >
                     {attachmentBusy ? "…" : "＋"}
                   </button>
-                  <span>Enter para enviar</span>
+                  <button
+                    type="button"
+                    className={`mic-btn ${isListening ? "listening" : ""}`}
+                    onClick={toggleListening}
+                    aria-label={isListening ? "Parar gravação de áudio" : "Gravar mensagem por voz"}
+                    title={isListening ? "Ouvindo sua voz... Clique para parar" : "Falar mensagem por voz (áudio)"}
+                  >
+                    {isListening ? (
+                      <span className="mic-rec-dot" />
+                    ) : (
+                      <span className="mic-icon">🎙</span>
+                    )}
+                  </button>
+                  <span>{isListening ? "Ouvindo você..." : "Enter para enviar"}</span>
                   <button
                     className="send"
                     onClick={() => void sendMessage()}
