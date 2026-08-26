@@ -540,6 +540,17 @@
 .debt-head h3 {
   margin: 4px 0 16px;
 }
+.debt-actions-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.debt-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .debt-progress-label {
   display: flex;
   flex: 0 0 auto;

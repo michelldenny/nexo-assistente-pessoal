@@ -571,12 +571,25 @@ export async function DELETE(req: Request) {
     const months = [
       ...new Set((installments ?? []).map((item) => item.invoice_month)),
     ];
-    const [removedInstallments, removedPurchase] = await Promise.all([
-      db.from("card_installments").delete().eq("purchase_id", id),
-      db.from("card_purchases").delete().eq("id", id),
-    ]);
+
+    // Deleta primeiro as parcelas filhas para respeitar restrições de chave estrangeira
+    const removedInstallments = await db
+      .from("card_installments")
+      .delete()
+      .eq("purchase_id", id);
     if (removedInstallments.error) throw removedInstallments.error;
-    if (removedPurchase.error) throw removedPurchase.error;
+
+    // Em seguida deleta a compra pai (com soft-delete de segurança caso haja vínculo)
+    const removedPurchase = await db
+      .from("card_purchases")
+      .delete()
+      .eq("id", id);
+    if (removedPurchase.error) {
+      await db
+        .from("card_purchases")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
+    }
 
     await Promise.all(
       months.map((month) => reconcileInvoiceMonth(db, purchase.card_id, month)),

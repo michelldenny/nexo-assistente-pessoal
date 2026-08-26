@@ -762,11 +762,55 @@ export default function CardsView({
                       </small>
                       <h3>{d.description}</h3>
                     </div>
-                    <div className="debt-progress-label">
-                      <strong>{itemPct}% pago</strong>
-                      <span>
-                        {d.paidInstallments}/{d.installmentCount}
-                      </span>
+                    <div className="debt-actions-group">
+                      <div className="debt-progress-label">
+                        <strong>{itemPct}% pago</strong>
+                        <span>
+                          {d.paidInstallments}/{d.installmentCount}
+                        </span>
+                      </div>
+                      <div className="debt-buttons">
+                        <button
+                          type="button"
+                          className="icon-action"
+                          onClick={() => {
+                            const p = data.purchases.find((item) => item.id === d.id) || {
+                              id: d.id,
+                              cardId: d.cardId,
+                              description: d.description,
+                              category: d.category,
+                              purchaseDate: d.startDate || d.startMonth || today(),
+                              totalCents: d.totalCents,
+                              installmentCount: d.installmentCount,
+                            };
+                            openEditPurchase(p);
+                          }}
+                          aria-label={`Editar ${d.description}`}
+                          title="Editar parcelamento"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          type="button"
+                          className="danger icon-action"
+                          onClick={() => {
+                            const p = data.purchases.find((item) => item.id === d.id) || {
+                              id: d.id,
+                              cardId: d.cardId,
+                              description: d.description,
+                              category: d.category,
+                              purchaseDate: d.startDate || d.startMonth || today(),
+                              totalCents: d.totalCents,
+                              installmentCount: d.installmentCount,
+                            };
+                            setPurchaseToDelete(p);
+                          }}
+                          aria-label={`Excluir ${d.description}`}
+                          title="Excluir parcelamento"
+                        >
+                          🗑
+                        </button>
+                      </div>
                     </div>
                   </div>
                   <div className="progress">
@@ -816,6 +860,21 @@ export default function CardsView({
           )}
         </div>
         {purchaseModal && purchaseForm()}
+        <ConfirmDialog
+          open={Boolean(purchaseToDelete)}
+          title="Excluir parcelamento?"
+          message={
+            purchaseToDelete
+              ? `O parcelamento “${purchaseToDelete.description}” e todas as suas parcelas serão excluídos. As faturas dos cartões serão recalculadas.`
+              : ""
+          }
+          confirmLabel="Excluir parcelamento"
+          danger
+          onCancel={() => setPurchaseToDelete(null)}
+          onConfirm={() =>
+            purchaseToDelete && void removePurchase(purchaseToDelete)
+          }
+        />
       </>
     );
   }
