@@ -87,6 +87,7 @@ export default function AgendaView({
     onMonthChange?.(key);
   };
   const [modalOpen, setModalOpen] = useState(false);
+  const [viewingEvent, setViewingEvent] = useState<EventItem | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<EventDraft>(newDraft);
   const [loading, setLoading] = useState(true);
@@ -312,7 +313,16 @@ export default function AgendaView({
                         key={event.id}
                         onClick={(e) => {
                           e.stopPropagation();
-                          openEdit(event);
+                          setViewingEvent(event);
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        title={`Ver detalhes de ${event.title}`}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.stopPropagation();
+                            setViewingEvent(event);
+                          }
                         }}
                       >
                         {event.startTime ?? ""} {event.title}
@@ -344,10 +354,25 @@ export default function AgendaView({
           ) : (
             <div className="upcoming-list">
               {upcoming.map((event) => (
-                <article key={event.id} className={event.status}>
+                <article
+                  key={event.id}
+                  className={`${event.status} clickable`}
+                  onClick={() => setViewingEvent(event)}
+                  role="button"
+                  tabIndex={0}
+                  title="Clique para ver detalhes"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      setViewingEvent(event);
+                    }
+                  }}
+                >
                   <button
                     className="event-check"
-                    onClick={() => void toggle(event)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void toggle(event);
+                    }}
                     aria-label="Marcar como concluído"
                   >
                     ✓
@@ -363,7 +388,12 @@ export default function AgendaView({
                   </div>
                   <button
                     className="event-more"
-                    onClick={() => openEdit(event)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setViewingEvent(event);
+                    }}
+                    title="Ver detalhes"
+                    aria-label={`Ver detalhes de ${event.title}`}
                   >
                     •••
                   </button>
@@ -373,6 +403,119 @@ export default function AgendaView({
           )}
         </aside>
       </div>
+
+      {viewingEvent && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={() => setViewingEvent(null)}
+        >
+          <div
+            className="modal event-summary-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="event-summary-title"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <button
+              className="modal-close"
+              onClick={() => setViewingEvent(null)}
+              aria-label="Fechar detalhes"
+            >
+              ×
+            </button>
+            <div className="event-summary-badge-row">
+              <span className={`event-summary-color ${viewingEvent.color}`} />
+              <p className="eyebrow">COMPROMISSO</p>
+              <button
+                type="button"
+                className={`event-summary-status ${viewingEvent.status}`}
+                onClick={() => {
+                  void toggle(viewingEvent);
+                  setViewingEvent((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          status:
+                            prev.status === "completed"
+                              ? "scheduled"
+                              : "completed",
+                        }
+                      : null,
+                  );
+                }}
+                title="Clique para alternar o status"
+              >
+                {viewingEvent.status === "completed"
+                  ? "✓ Concluído"
+                  : "● Agendado"}
+              </button>
+            </div>
+            <h2 id="event-summary-title">{viewingEvent.title}</h2>
+            <div className="event-summary-details">
+              <div className="event-detail-item">
+                <span className="detail-icon" aria-hidden="true">📅</span>
+                <div>
+                  <small>Data</small>
+                  <strong>{longDate(viewingEvent.eventDate)}</strong>
+                </div>
+              </div>
+              <div className="event-detail-item">
+                <span className="detail-icon" aria-hidden="true">⏰</span>
+                <div>
+                  <small>Horário</small>
+                  <strong>
+                    {viewingEvent.startTime
+                      ? `${viewingEvent.startTime}${viewingEvent.endTime ? ` às ${viewingEvent.endTime}` : ""}`
+                      : "Dia inteiro"}
+                  </strong>
+                </div>
+              </div>
+              {viewingEvent.location && (
+                <div className="event-detail-item">
+                  <span className="detail-icon" aria-hidden="true">📍</span>
+                  <div>
+                    <small>Local</small>
+                    <strong>{viewingEvent.location}</strong>
+                  </div>
+                </div>
+              )}
+              {viewingEvent.notes && (
+                <div className="event-detail-item notes-item">
+                  <span className="detail-icon" aria-hidden="true">📝</span>
+                  <div>
+                    <small>Anotações</small>
+                    <p>{viewingEvent.notes}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="event-summary-actions">
+              <button
+                type="button"
+                className="danger"
+                onClick={() => {
+                  setEventToDelete(viewingEvent);
+                  setViewingEvent(null);
+                }}
+              >
+                🗑 Excluir
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => {
+                  openEdit(viewingEvent);
+                  setViewingEvent(null);
+                }}
+              >
+                ✎ Editar compromisso
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {modalOpen && (
         <div
           className="modal-backdrop"

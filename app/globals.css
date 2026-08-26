@@ -1238,6 +1238,119 @@ h1 {
   background: #f3f8f4;
 }
 
+/* Event Summary Modal */
+.event-summary-modal {
+  width: min(480px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.event-summary-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.event-summary-color {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.event-summary-color.green { background: #2f866d; }
+.event-summary-color.purple { background: #795fc1; }
+.event-summary-color.coral { background: #df795d; }
+.event-summary-color.lime { background: #7fa64e; }
+
+.event-summary-status {
+  margin-left: auto;
+  border: 0;
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.event-summary-status.scheduled {
+  background: #e8f7ee;
+  color: #166534;
+}
+
+.event-summary-status.completed {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.event-summary-modal h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0;
+  line-height: 1.25;
+}
+
+.event-summary-details {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  background: #f8faf8;
+  border: 1px solid #e7efe9;
+  border-radius: 14px;
+}
+
+.event-detail-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.detail-icon {
+  font-size: 16px;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+
+.event-detail-item div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.event-detail-item small {
+  font-size: 10.5px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.event-detail-item strong {
+  font-size: 14px;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.event-detail-item p {
+  font-size: 13px;
+  color: #374151;
+  margin: 0;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.event-summary-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
