@@ -122,8 +122,17 @@ const functionDeclarations = [
   },
   {
     name: "summarize_finances",
-    description: "Consulte receitas, despesas e saldo salvos.",
-    parameters: { type: "OBJECT", properties: {} },
+    description:
+      "Consulte receitas, salário, despesas, categorias e saldo salvos no financeiro do usuário. Use SEMPRE que o usuário perguntar sobre finanças, salário, rendimentos, gastos, planejamento ou pedir cálculos orçamentários (como regra 50/30/20, metas ou cortes de gastos).",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        month: {
+          type: "STRING",
+          description: "Mês de referência YYYY-MM (opcional, padrão mês corrente).",
+        },
+      },
+    },
   },
   {
     name: "create_calendar_event",
@@ -191,7 +200,10 @@ async function callGemini(contents: Content[]) {
         systemInstruction: {
           parts: [
             {
-              text: `Você é o Nexo, assistente pessoal financeiro e de agenda. Responda em português do Brasil, de forma curta. Hoje em São Paulo é ${today()}. Leia imagens, PDFs, textos e planilhas anexados, extraindo valores, datas, estabelecimentos, cartões e parcelas. Use as ferramentas para preparar registros ou consultar dados. Se o usuário pedir apenas para ler ou analisar um anexo, responda com a análise sem cadastrar nada. Só salve compras de cartão quando ele pedir explicitamente para registrar. Quando ele pedir para adicionar ou importar uma fatura/extrato inteiro, chame create_card_statement_purchases UMA ÚNICA VEZ, enviando TODAS as compras identificadas — nunca pare no primeiro item e nunca use create_card_purchase nesse caso. Não trate total da fatura, pagamento, saldo anterior ou resumo como compra e não repita lançamentos duplicados no documento. Nunca diga que salvou algo apenas preparado.`,
+              text: `Você é o Nexo, assistente pessoal financeiro e de agenda. Responda em português do Brasil, de forma clara, prática e empática. Hoje em São Paulo é ${today()}.
+Leia imagens, PDFs, textos e planilhas anexados, extraindo valores, datas, estabelecimentos, cartões e parcelas.
+Sempre que o usuário perguntar sobre orçamento, finanças, gastos, quanto ganha/gasta, planejamento ou pedir cálculos com base no salário/renda (como a regra 50/30/20 ou limites de gastos), CONSULTE IMEDIATAMENTE as finanças do usuário chamando summarize_finances para obter o salário e despesas reais cadastradas, usando esses números reais na resposta sem perguntar o que já está salvo.
+Se o usuário pedir apenas para ler ou analisar um anexo, responda com a análise sem cadastrar nada. Só salve compras de cartão quando ele pedir explicitamente para registrar. Quando ele pedir para adicionar ou importar uma fatura/extrato inteiro, chame create_card_statement_purchases UMA ÚNICA VEZ enviando TODAS as compras. Não duplique nem invente dados.`,
             },
           ],
         },
@@ -401,23 +413,79 @@ export async function POST(request: Request) {
 
     let result: Record<string, unknown>;
     if (call.name === "summarize_finances") {
-      const { data, error } = await getSupabase()
+      const args = (call.args || {}) as { month?: string };
+      const targetMonth = args.month || today().slice(0, 7);
+      const db = getSupabase();
+      
+      const { data, error } = await db
         .from("transactions")
-        .select("kind,amount_cents")
-        .is("deleted_at", null);
+        .select("id,kind,description,category,amount_cents,occurred_on,status")
+        .is("deleted_at", null)
+        .order("occurred_on", { ascending: false });
       if (error) throw error;
-      const sums = (data ?? []).reduce(
-        (acc, row) => {
-          acc[row.kind as "expense" | "income"] += row.amount_cents;
-          return acc;
-        },
-        { expense: 0, income: 0 },
+
+      const allRows = data ?? [];
+      const currentMonthRows = allRows.filter((r) =>
+        r.occurred_on.startsWith(targetMonth),
       );
+      
+      // Se não houver transações no mês atual, usa os dados mais recentes disponíveis
+      const activeRows = currentMonthRows.length > 0 ? currentMonthRows : allRows;
+
+      const incomeRows = activeRows.filter((r) => r.kind === "income");
+      const expenseRows = activeRows.filter((r) => r.kind === "expense");
+
+      const incomeTotalCents = incomeRows.reduce(
+        (sum, r) => sum + r.amount_cents,
+        0,
+      );
+      const expenseTotalCents = expenseRows.reduce(
+        (sum, r) => sum + r.amount_cents,
+        0,
+      );
+
+      const expensesByCategory: Record<string, number> = {};
+      for (const exp of expenseRows) {
+        const cat = exp.category || "Outros";
+        expensesByCategory[cat] = (expensesByCategory[cat] ?? 0) + exp.amount_cents;
+      }
+
+      const salaryEntries = incomeRows.filter(
+        (r) =>
+          r.category === "Salário" ||
+          /sal[aá]rio|remunera[cç]|pr[oó]-labore|honor[aá]rio/i.test(r.description),
+      );
+
       result = {
-        income_cents: sums.income,
-        expense_cents: sums.expense,
-        balance_cents: sums.income - sums.expense,
-        currency: "BRL",
+        reference_month: targetMonth,
+        monthly_income_cents: incomeTotalCents,
+        monthly_income_formatted: `R$ ${(incomeTotalCents / 100).toFixed(2).replace(".", ",")}`,
+        monthly_expense_cents: expenseTotalCents,
+        monthly_expense_formatted: `R$ ${(expenseTotalCents / 100).toFixed(2).replace(".", ",")}`,
+        balance_cents: incomeTotalCents - expenseTotalCents,
+        balance_formatted: `R$ ${((incomeTotalCents - expenseTotalCents) / 100).toFixed(2).replace(".", ",")}`,
+        salary_entries: salaryEntries.map((s) => ({
+          description: s.description,
+          amount_cents: s.amount_cents,
+          formatted: `R$ ${(s.amount_cents / 100).toFixed(2).replace(".", ",")}`,
+        })),
+        income_sources: incomeRows.map((inc) => ({
+          description: inc.description,
+          category: inc.category,
+          amount_cents: inc.amount_cents,
+          formatted: `R$ ${(inc.amount_cents / 100).toFixed(2).replace(".", ",")}`,
+        })),
+        expenses_by_category: Object.entries(expensesByCategory).map(
+          ([category, amount_cents]) => ({
+            category,
+            amount_cents,
+            formatted: `R$ ${(amount_cents / 100).toFixed(2).replace(".", ",")}`,
+            percent_of_income:
+              incomeTotalCents > 0
+                ? Math.round((amount_cents / incomeTotalCents) * 100)
+                : null,
+          }),
+        ),
       };
     } else {
       const { data, error } = await getSupabase()
