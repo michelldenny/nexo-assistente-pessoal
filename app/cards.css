@@ -837,6 +837,25 @@
   .cards-chart {
     padding: 18px 12px;
   }
+  .cards-chart .chart-column strong {
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    font-size: 8.5px;
+    height: 52px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    margin: 0 auto;
+  }
+  .cards-chart .chart-column {
+    grid-template-rows: 54px 1fr 24px;
+    min-width: 32px;
+  }
+  .cards-chart .chart-bars-14 {
+    min-width: 540px;
+    height: 270px;
+  }
   .invoice-list article {
     grid-template-columns: 1fr auto;
   }

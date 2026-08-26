@@ -19,8 +19,9 @@ type GeminiResponse = {
 
 const functionDeclarations = [
   {
-    name: "prepare_transaction",
-    description: "Prepare uma receita ou despesa para revisão antes de salvar.",
+    name: "create_transaction",
+    description:
+      "Cadastre imediatamente uma receita ou despesa no financeiro do usuário. Use sempre que o usuário pedir para registrar, gastar, pagar ou receber valores.",
     parameters: {
       type: "OBJECT",
       properties: {
@@ -125,9 +126,9 @@ const functionDeclarations = [
     parameters: { type: "OBJECT", properties: {} },
   },
   {
-    name: "prepare_calendar_event",
+    name: "create_calendar_event",
     description:
-      "Prepare um compromisso para revisão antes de salvar na agenda.",
+      "Cadastre imediatamente um compromisso ou evento na agenda do usuário.",
     parameters: {
       type: "OBJECT",
       properties: {
@@ -266,7 +267,7 @@ export async function POST(request: Request) {
     if (!call)
       return Response.json({ type: "message", message: textOf(first) });
 
-    if (call.name === "prepare_transaction") {
+    if (call.name === "create_transaction") {
       const a = call.args as {
         kind: "expense" | "income";
         description: string;
@@ -274,16 +275,29 @@ export async function POST(request: Request) {
         amount_cents: number;
         occurred_on: string;
       };
-      return Response.json({
-        type: "transaction_draft",
-        message: "Revise os dados antes de confirmar.",
-        draft: {
+      const db = getSupabase();
+      const { data, error } = await db
+        .from("transactions")
+        .insert({
           kind: a.kind,
           description: a.description,
-          category: a.category,
-          amount: (a.amount_cents / 100).toFixed(2).replace(".", ","),
-          occurredOn: a.occurred_on,
-        },
+          category: a.category || "Outros",
+          amount_cents: Math.round(a.amount_cents),
+          occurred_on: a.occurred_on,
+          status: "settled",
+          source: "assistant",
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      const formatted = new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+      }).format(a.amount_cents / 100);
+      return Response.json({
+        type: "transaction_created",
+        transaction: camel(data),
+        message: `${a.kind === "income" ? "Receita" : "Despesa"} de ${formatted} (“${a.description}”) registrada com sucesso no seu financeiro.`,
       });
     }
     if (call.name === "create_card_purchase") {
@@ -351,29 +365,37 @@ export async function POST(request: Request) {
         message: `${saved.count} transações da fatura foram adicionadas ao cartão ${saved.card.name}.`,
       });
     }
-    if (call.name === "prepare_calendar_event") {
+    if (call.name === "create_calendar_event") {
       const a = call.args as {
         title: string;
         event_date: string;
-        start_time: string;
-        end_time: string;
-        location: string;
-        notes: string;
-        color: string;
+        start_time?: string;
+        end_time?: string;
+        location?: string;
+        notes?: string;
+        color?: string;
       };
-      return Response.json({
-        type: "event_draft",
-        message: "Preparei o compromisso. Revise os dados antes de confirmar.",
-        draft: {
+      const db = getSupabase();
+      const { data, error } = await db
+        .from("calendar_events")
+        .insert({
           title: a.title,
-          eventDate: a.event_date,
-          startTime: a.start_time,
-          endTime: a.end_time,
-          location: a.location,
-          notes: a.notes,
-          color: a.color,
+          event_date: a.event_date,
+          start_time: a.start_time || null,
+          end_time: a.end_time || null,
+          location: a.location || "",
+          notes: a.notes || "",
+          color: a.color || "green",
           status: "scheduled",
-        },
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      const [year, month, day] = a.event_date.split("-");
+      return Response.json({
+        type: "event_created",
+        event: camel(data),
+        message: `Compromisso “${a.title}” adicionado à sua agenda para o dia ${day}/${month}${a.start_time ? ` às ${a.start_time}` : ""}.`,
       });
     }
 

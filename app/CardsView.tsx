@@ -207,8 +207,8 @@ export default function CardsView({
       .filter((item) => item.cardId === selectedCard.id)
       .map((item) => {
         const installments = data.installments
-            .filter((part) => part.purchaseId === item.id)
-            .sort((a, b) => a.installmentNumber - b.installmentNumber),
+          .filter((part) => part.purchaseId === item.id)
+          .sort((a, b) => a.installmentNumber - b.installmentNumber),
           installment = installments.find(
             (part) => part.invoiceMonth === referenceMonth,
           );
@@ -653,8 +653,8 @@ export default function CardsView({
   if (loading) return <div className="agenda-empty">Carregando…</div>;
   if (mode === "debts") {
     const active = data.debts.filter(
-        (d) => d.paidInstallments < d.installmentCount,
-      ),
+      (d) => d.paidInstallments < d.installmentCount,
+    ),
       total = data.debts.reduce((s, d) => s + d.totalCents, 0),
       paid = data.debts.reduce((s, d) => s + d.paidCents, 0),
       balance = Math.max(0, total - paid),
@@ -848,8 +848,8 @@ export default function CardsView({
         <div className="cards-grid">
           {sortedCards.map((c) => {
             const cardInvoices = data.invoices.filter(
-                (invoice) => invoice.cardId === c.id && invoice.totalCents !== 0,
-              ),
+              (invoice) => invoice.cardId === c.id && invoice.totalCents !== 0,
+            ),
               openInvoices = cardInvoices.filter(
                 (invoice) => invoice.status === "open",
               ),
@@ -1203,7 +1203,7 @@ export default function CardsView({
                         {isRefund
                           ? "↩️"
                           : CATEGORY_ICONS[p.category] ||
-                            CATEGORY_ICONS.Outros}
+                          CATEGORY_ICONS.Outros}
                       </span>
                       <div className="purchase-info">
                         <strong>{p.description}</strong>

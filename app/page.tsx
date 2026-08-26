@@ -88,6 +88,7 @@ export default function Home() {
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [monthlyCashflow, setMonthlyCashflow] = useState<
@@ -389,10 +390,13 @@ export default function Home() {
       if (!response.ok) throw new Error(body.error);
       setReply(body.message);
       setAttachment(null);
-      if (body.type === "transaction_draft") {
-        setDraft({ ...emptyDraft(), ...body.draft });
-        setEditingId(null);
-        setModalOpen(true);
+      if (body.type === "transaction_created") {
+        await loadEntries();
+        await loadInsights();
+        setNotice(body.message || "Lançamento adicionado com sucesso.");
+      }
+      if (body.type === "event_created") {
+        setNotice(body.message || "Compromisso adicionado à sua agenda.");
       }
       if (
         body.type === "purchase_created" ||
@@ -403,12 +407,17 @@ export default function Home() {
         setNotice(
           body.type === "purchases_created"
             ? `${body.count} transações da fatura foram importadas.`
-            : "Compra adicionada ao cartão e à fatura correspondente.",
+            : body.message || "Compra adicionada ao cartão e à fatura correspondente.",
         );
       }
       if (body.type === "event_draft") {
         setAgendaDraft(body.draft);
         setTab("Agenda");
+      }
+      if (body.type === "transaction_draft") {
+        setDraft({ ...emptyDraft(), ...body.draft });
+        setEditingId(null);
+        setModalOpen(true);
       }
     } catch (error) {
       setReply(
@@ -557,14 +566,6 @@ export default function Home() {
                   ›
                 </button>
               </div>
-              {tab === "Financeiro" && (
-                <button
-                  className="secondary import-trigger"
-                  onClick={() => setImportOpen(true)}
-                >
-                  <span>⇧</span> Importar backup
-                </button>
-              )}
               {tab !== "Agenda" && tab !== "Cartões" && (
                 <button
                   className="primary"
@@ -690,34 +691,117 @@ export default function Home() {
                         {categoryExpenses.map((item) => {
                           const catColor =
                             CATEGORY_COLORS[item.category] || CATEGORY_COLORS.Outros;
+                          const isExpanded = expandedCategory === item.category;
+                          const categoryEntries = entries.filter(
+                            (e) =>
+                              e.kind === "expense" &&
+                              (e.category || "Outros") === item.category,
+                          );
                           return (
-                            <div className="category-item" key={item.category}>
-                              <div className="category-info-header">
-                                <div className="category-name-group">
-                                  <span
-                                    className="category-badge-dot"
-                                    style={{ backgroundColor: catColor }}
+                            <div
+                              className={`category-item ${isExpanded ? "expanded" : ""}`}
+                              key={item.category}
+                            >
+                              <div
+                                className="category-item-clickable"
+                                onClick={() =>
+                                  setExpandedCategory((prev) =>
+                                    prev === item.category ? null : item.category,
+                                  )
+                                }
+                                role="button"
+                                tabIndex={0}
+                                title="Clique para ver ou ocultar as transações desta categoria"
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" || e.key === " ") {
+                                    setExpandedCategory((prev) =>
+                                      prev === item.category ? null : item.category,
+                                    );
+                                  }
+                                }}
+                              >
+                                <div className="category-info-header">
+                                  <div className="category-name-group">
+                                    <span
+                                      className="category-badge-dot"
+                                      style={{ backgroundColor: catColor }}
+                                    />
+                                    <strong>{item.category}</strong>
+                                    <small className="category-count">
+                                      {item.count} {item.count === 1 ? "despesa" : "despesas"}
+                                    </small>
+                                    <span className="category-chevron">
+                                      {isExpanded ? "▲" : "▼"}
+                                    </span>
+                                  </div>
+                                  <div className="category-amount-group">
+                                    <strong>{money(item.totalCents)}</strong>
+                                    <span className="category-percent-tag">
+                                      {item.percent}%
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="category-progress-track">
+                                  <i
+                                    style={{
+                                      width: `${Math.max(4, item.percent)}%`,
+                                      backgroundColor: catColor,
+                                    }}
                                   />
-                                  <strong>{item.category}</strong>
-                                  <small className="category-count">
-                                    {item.count} {item.count === 1 ? "despesa" : "despesas"}
-                                  </small>
-                                </div>
-                                <div className="category-amount-group">
-                                  <strong>{money(item.totalCents)}</strong>
-                                  <span className="category-percent-tag">
-                                    {item.percent}%
-                                  </span>
                                 </div>
                               </div>
-                              <div className="category-progress-track">
-                                <i
-                                  style={{
-                                    width: `${Math.max(4, item.percent)}%`,
-                                    backgroundColor: catColor,
-                                  }}
-                                />
-                              </div>
+
+                              {isExpanded && (
+                                <div className="category-transactions-dropdown">
+                                  {categoryEntries.map((entry) => (
+                                    <div
+                                      className="category-subtransaction"
+                                      key={entry.id}
+                                    >
+                                      <div className="category-subtransaction-left">
+                                        <span
+                                          className="sub-dot"
+                                          style={{ backgroundColor: catColor }}
+                                        />
+                                        <div>
+                                          <strong>{entry.description}</strong>
+                                          <small>
+                                            {displayDate(entry.occurredOn)}
+                                            {entry.source === "assistant"
+                                              ? " · via assistente"
+                                              : ""}
+                                          </small>
+                                        </div>
+                                      </div>
+                                      <div className="category-subtransaction-right">
+                                        <strong className="sub-amount">
+                                          − {money(entry.amountCents)}
+                                        </strong>
+                                        <button
+                                          className={`entry-status ${entry.status} ${entry.kind}`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            void toggleStatus(entry);
+                                          }}
+                                        >
+                                          {statusLabel(entry)}
+                                        </button>
+                                        <button
+                                          className="icon-action-mini"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            openEdit(entry);
+                                          }}
+                                          aria-label={`Editar ${entry.description}`}
+                                          title="Editar lançamento"
+                                        >
+                                          ✎
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           );
                         })}
