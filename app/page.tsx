@@ -294,7 +294,9 @@ export default function Home() {
       if (transactionSort.field === "date") {
         comparison = a.occurredOn.localeCompare(b.occurredOn) || a.id - b.id;
       } else {
-        comparison = a.amountCents - b.amountCents;
+        const valA = a.kind === "income" ? a.amountCents : -a.amountCents;
+        const valB = b.kind === "income" ? b.amountCents : -b.amountCents;
+        comparison = valA - valB;
       }
       return transactionSort.direction === "asc" ? comparison : -comparison;
     });
