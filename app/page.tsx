@@ -9,6 +9,7 @@ import {
 } from "./categories";
 import CardsView from "./CardsView";
 import ConfirmDialog from "./ConfirmDialog";
+import FormattedMessage from "./FormattedMessage";
 import ImportBackupModal from "./ImportBackupModal";
 import { formatMoneyInput, formatMonth, parseMoneyInput } from "./ui-format";
 
@@ -1308,7 +1309,9 @@ export default function Home() {
               </div>
               <div className="conversation">
                 <p className="assistant-label">NEXO · AGORA</p>
-                <div className="bubble">{reply}</div>
+                <div className="bubble">
+                  <FormattedMessage text={reply} />
+                </div>
                 <div
                   className="insight-list"
                   aria-label="Análises do assistente"

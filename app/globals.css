@@ -1035,13 +1035,98 @@ h1 {
 }
 
 .bubble {
-  padding: 14px 15px;
-  border-radius: 4px 14px 14px 14px;
-  background: #f1f4ee;
-  color: #3e4942;
+  padding: 16px 18px;
+  border-radius: 4px 16px 16px 16px;
+  background: #f1f5ee;
+  color: #334037;
   font:
-    14px/1.55 Georgia,
+    14px/1.65 Georgia,
     serif;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.bubble-formatted {
+  display: flex;
+  flex-direction: column;
+}
+
+.bubble-paragraph {
+  margin: 0 0 10px 0;
+  line-height: 1.65;
+}
+
+.bubble-paragraph:last-child {
+  margin-bottom: 0;
+}
+
+.bubble-heading {
+  font-family: var(--font-manrope, sans-serif);
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a271f;
+  margin: 14px 0 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bubble-heading:first-child {
+  margin-top: 0;
+}
+
+.bubble-divider {
+  border: 0;
+  height: 1px;
+  background: #d8e0d6;
+  margin: 12px 0;
+  width: 100%;
+}
+
+.bubble-list {
+  list-style: none;
+  margin: 4px 0 10px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bubble-list:last-child {
+  margin-bottom: 0;
+}
+
+.bubble-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.55;
+}
+
+.bubble-bullet {
+  color: var(--green, #168565);
+  font-size: 8px;
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+
+.bubble-item-content {
+  flex: 1;
+}
+
+.bubble-strong {
+  color: #112017;
+  font-weight: 700;
+}
+
+.bubble-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.85em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #e2e9de;
+  color: #17422f;
+  border: 1px solid #d2ded0;
+  font-weight: 600;
 }
 
 .suggestions {
