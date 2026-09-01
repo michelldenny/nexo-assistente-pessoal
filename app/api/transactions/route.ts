@@ -78,22 +78,103 @@ export async function GET(req: Request) {
       .gte("occurred_on", rangeStart)
       .lt("occurred_on", rangeEnd);
 
-    const monthlyCashflow: Record<string, { incomeCents: number; expenseCents: number }> = {};
+    const monthlyCashflow: Record<
+      string,
+      { incomeCents: number; expenseCents: number }
+    > = {};
     for (const item of flowData ?? []) {
       const itemMonth = item.occurred_on.slice(0, 7);
       if (!monthlyCashflow[itemMonth]) {
         monthlyCashflow[itemMonth] = { incomeCents: 0, expenseCents: 0 };
       }
       if (item.kind === "income") {
-        monthlyCashflow[itemMonth].incomeCents += Number(item.amount_cents) || 0;
+        monthlyCashflow[itemMonth].incomeCents +=
+          Number(item.amount_cents) || 0;
       } else {
-        monthlyCashflow[itemMonth].expenseCents += Number(item.amount_cents) || 0;
+        monthlyCashflow[itemMonth].expenseCents +=
+          Number(item.amount_cents) || 0;
       }
+    }
+
+    const { data: installmentsData } = await getSupabase()
+      .from("card_installments")
+      .select(
+        "id,purchase_id,card_id,installment_number,amount_cents,invoice_month,status",
+      )
+      .eq("invoice_month", month);
+
+    let cardExpenses: Array<{
+      id: number;
+      installmentId: number;
+      purchaseId: number;
+      cardId: number;
+      cardName: string;
+      cardColor: string;
+      description: string;
+      category: string;
+      amountCents: number;
+      purchaseDate: string;
+      installmentNumber: number;
+      installmentCount: number;
+      status: "pending" | "paid";
+    }> = [];
+
+    if (installmentsData && installmentsData.length > 0) {
+      const purchaseIds = [
+        ...new Set(installmentsData.map((i) => i.purchase_id)),
+      ];
+      const cardIds = [...new Set(installmentsData.map((i) => i.card_id))];
+
+      const [{ data: purchasesData }, { data: cardsData }] = await Promise.all([
+        getSupabase()
+          .from("card_purchases")
+          .select(
+            "id,description,category,purchase_date,total_cents,installment_count,deleted_at",
+          )
+          .in("id", purchaseIds)
+          .is("deleted_at", null),
+        getSupabase()
+          .from("credit_cards")
+          .select("id,name,bank,color,deleted_at")
+          .in("id", cardIds)
+          .is("deleted_at", null),
+      ]);
+
+      const purchaseMap = new Map(
+        (purchasesData ?? []).map((p) => [p.id, p]),
+      );
+      const cardMap = new Map((cardsData ?? []).map((c) => [c.id, c]));
+
+      cardExpenses = installmentsData
+        .filter(
+          (inst) =>
+            purchaseMap.has(inst.purchase_id) && cardMap.has(inst.card_id),
+        )
+        .map((inst) => {
+          const purchase = purchaseMap.get(inst.purchase_id)!;
+          const card = cardMap.get(inst.card_id)!;
+          return {
+            id: inst.id,
+            installmentId: inst.id,
+            purchaseId: purchase.id,
+            cardId: card.id,
+            cardName: card.name,
+            cardColor: card.color || "green",
+            description: purchase.description,
+            category: purchase.category || "Outros",
+            amountCents: inst.amount_cents,
+            purchaseDate: purchase.purchase_date,
+            installmentNumber: inst.installment_number,
+            installmentCount: purchase.installment_count,
+            status: inst.status as "pending" | "paid",
+          };
+        });
     }
 
     return Response.json({
       transactions: (data ?? []).map((r) => camel(r)),
       monthlyCashflow,
+      cardExpenses,
     });
   } catch (e) {
     console.error("Failed to load monthly transactions", e);

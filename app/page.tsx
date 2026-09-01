@@ -25,6 +25,27 @@ type Entry = {
   invoiceId?: number | null;
 };
 
+type CardExpense = {
+  id: number;
+  installmentId: number;
+  purchaseId: number;
+  cardId: number;
+  cardName: string;
+  cardColor: string;
+  description: string;
+  category: string;
+  amountCents: number;
+  purchaseDate: string;
+  installmentNumber: number;
+  installmentCount: number;
+  status: "pending" | "paid";
+};
+
+type TransactionSort = {
+  field: "date" | "value";
+  direction: "asc" | "desc";
+};
+
 type Draft = {
   kind: "expense" | "income";
   description: string;
@@ -90,6 +111,12 @@ export default function Home() {
   const [importOpen, setImportOpen] = useState(false);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
+  const [cardExpenses, setCardExpenses] = useState<CardExpense[]>([]);
+  const [transactionSort, setTransactionSort] = useState<TransactionSort>({
+    field: "date",
+    direction: "desc",
+  });
+  const speechBaseTextRef = useRef("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
 
@@ -139,6 +166,7 @@ export default function Home() {
           if (!response.ok) throw new Error(body.error);
           if (!signal?.aborted) {
             setEntries(body.transactions ?? []);
+            setCardExpenses(body.cardExpenses ?? []);
             if (body.monthlyCashflow) {
               setMonthlyCashflow(body.monthlyCashflow);
             }
@@ -173,27 +201,116 @@ export default function Home() {
   );
 
   const categoryExpenses = useMemo(() => {
-    const expenseEntries = entries.filter((e) => e.kind === "expense");
-    const grouped: Record<string, { totalCents: number; count: number }> = {};
-    for (const entry of expenseEntries) {
+    // Transações normais de despesa (exclui faturas agrupadas para evitar duplicidade com os itens reais do cartão)
+    const normalExpenses = entries.filter(
+      (e) => e.kind === "expense" && !e.invoiceId,
+    );
+
+    const grouped: Record<
+      string,
+      {
+        totalCents: number;
+        count: number;
+        entries: Entry[];
+        cardExpenses: CardExpense[];
+      }
+    > = {};
+
+    for (const entry of normalExpenses) {
       const cat = entry.category || "Outros";
       if (!grouped[cat]) {
-        grouped[cat] = { totalCents: 0, count: 0 };
+        grouped[cat] = {
+          totalCents: 0,
+          count: 0,
+          entries: [],
+          cardExpenses: [],
+        };
       }
       grouped[cat].totalCents += entry.amountCents;
       grouped[cat].count += 1;
+      grouped[cat].entries.push(entry);
     }
-    const totalExp = totals.expense;
+
+    // Se houver transação de fatura mas nenhum cardExpense detalhado retornado (fallback)
+    if (cardExpenses.length === 0) {
+      const invoiceExpenses = entries.filter(
+        (e) => e.kind === "expense" && e.invoiceId,
+      );
+      for (const entry of invoiceExpenses) {
+        const cat = entry.category || "Outros";
+        if (!grouped[cat]) {
+          grouped[cat] = {
+            totalCents: 0,
+            count: 0,
+            entries: [],
+            cardExpenses: [],
+          };
+        }
+        grouped[cat].totalCents += entry.amountCents;
+        grouped[cat].count += 1;
+        grouped[cat].entries.push(entry);
+      }
+    }
+
+    // Adiciona os itens comprados nos cartões de crédito para este mês
+    for (const cExp of cardExpenses) {
+      const cat = cExp.category || "Outros";
+      if (!grouped[cat]) {
+        grouped[cat] = {
+          totalCents: 0,
+          count: 0,
+          entries: [],
+          cardExpenses: [],
+        };
+      }
+      grouped[cat].totalCents += cExp.amountCents;
+      grouped[cat].count += 1;
+      grouped[cat].cardExpenses.push(cExp);
+    }
+
+    const totalCategoryCents = Object.values(grouped).reduce(
+      (sum, item) => sum + item.totalCents,
+      0,
+    );
+
     return Object.entries(grouped)
       .map(([category, item]) => ({
         category,
         totalCents: item.totalCents,
         count: item.count,
+        entries: item.entries,
+        cardExpenses: item.cardExpenses,
         percent:
-          totalExp > 0 ? Math.round((item.totalCents / totalExp) * 100) : 0,
+          totalCategoryCents > 0
+            ? Math.round((item.totalCents / totalCategoryCents) * 100)
+            : 0,
       }))
       .sort((a, b) => b.totalCents - a.totalCents);
-  }, [entries, totals.expense]);
+  }, [entries, cardExpenses]);
+
+  const sortedEntries = useMemo(() => {
+    return [...entries].sort((a, b) => {
+      let comparison = 0;
+      if (transactionSort.field === "date") {
+        comparison = a.occurredOn.localeCompare(b.occurredOn) || a.id - b.id;
+      } else {
+        comparison = a.amountCents - b.amountCents;
+      }
+      return transactionSort.direction === "asc" ? comparison : -comparison;
+    });
+  }, [entries, transactionSort]);
+
+  function toggleTransactionSort(field: TransactionSort["field"]) {
+    setTransactionSort((current) => ({
+      field,
+      direction:
+        current.field === field
+          ? current.direction === "desc"
+            ? "asc"
+            : "desc"
+          : "desc",
+    }));
+  }
 
   const currentYear = Number(month.slice(0, 4));
   const cashflowMonths = useMemo(() => {
@@ -502,17 +619,41 @@ export default function Home() {
       recognition.continuous = true;
       recognition.interimResults = true;
 
+      // Preserva o texto base já digitado no input
+      speechBaseTextRef.current = message.trim();
+
       recognition.onstart = () => {
         setIsListening(true);
       };
 
       recognition.onresult = (event: any) => {
-        let currentText = "";
+        let finalTranscript = "";
+        let interimTranscript = "";
+
         for (let i = 0; i < event.results.length; i++) {
-          currentText += event.results[i][0].transcript;
+          const res = event.results[i];
+          const chunk = (res[0]?.transcript || "").trim();
+          if (!chunk) continue;
+
+          if (res.isFinal) {
+            finalTranscript += (finalTranscript ? " " : "") + chunk;
+          } else {
+            interimTranscript += (interimTranscript ? " " : "") + chunk;
+          }
         }
-        if (currentText) {
-          setMessage(currentText);
+
+        const base = speechBaseTextRef.current;
+        const spoken = [finalTranscript, interimTranscript]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+        const combined = [base, spoken]
+          .filter(Boolean)
+          .join(" ")
+          .replace(/\s+/g, " ");
+
+        if (combined) {
+          setMessage(combined);
         }
       };
 
@@ -760,11 +901,6 @@ export default function Home() {
                           const catColor =
                             CATEGORY_COLORS[item.category] || CATEGORY_COLORS.Outros;
                           const isExpanded = expandedCategory === item.category;
-                          const categoryEntries = entries.filter(
-                            (e) =>
-                              e.kind === "expense" &&
-                              (e.category || "Outros") === item.category,
-                          );
                           return (
                             <div
                               className={`category-item ${isExpanded ? "expanded" : ""}`}
@@ -821,10 +957,11 @@ export default function Home() {
 
                               {isExpanded && (
                                 <div className="category-transactions-dropdown">
-                                  {categoryEntries.map((entry) => (
+                                  {/* Despesas normais da conta / dinheiro */}
+                                  {item.entries.map((entry) => (
                                     <div
                                       className="category-subtransaction"
-                                      key={entry.id}
+                                      key={`entry-${entry.id}`}
                                     >
                                       <div className="category-subtransaction-left">
                                         <span
@@ -865,6 +1002,67 @@ export default function Home() {
                                         >
                                           ✎
                                         </button>
+                                      </div>
+                                    </div>
+                                  ))}
+
+                                  {/* Compras no cartão de crédito nesta categoria */}
+                                  {item.cardExpenses.map((cExp) => (
+                                    <div
+                                      className="category-subtransaction"
+                                      key={`card-exp-${cExp.installmentId}`}
+                                    >
+                                      <div className="category-subtransaction-left">
+                                        <span
+                                          className="sub-dot"
+                                          style={{ backgroundColor: catColor }}
+                                        />
+                                        <div>
+                                          <div
+                                            style={{
+                                              display: "flex",
+                                              alignItems: "center",
+                                              gap: "6px",
+                                              flexWrap: "wrap",
+                                            }}
+                                          >
+                                            <strong>{cExp.description}</strong>
+                                            <span
+                                              style={{
+                                                fontSize: "0.72rem",
+                                                padding: "1px 6px",
+                                                borderRadius: "4px",
+                                                background: "rgba(255, 255, 255, 0.08)",
+                                                border: "1px solid rgba(255, 255, 255, 0.14)",
+                                                color: "var(--text-secondary, #94a3b8)",
+                                                fontWeight: 500,
+                                                display: "inline-flex",
+                                                alignItems: "center",
+                                                gap: "3px",
+                                              }}
+                                            >
+                                              💳 {cExp.cardName}
+                                              {cExp.installmentCount > 1
+                                                ? ` (${cExp.installmentNumber}/${cExp.installmentCount})`
+                                                : ""}
+                                            </span>
+                                          </div>
+                                          <small>
+                                            {displayDate(cExp.purchaseDate)} · Compra no cartão
+                                          </small>
+                                        </div>
+                                      </div>
+                                      <div className="category-subtransaction-right">
+                                        <strong className="sub-amount">
+                                          − {money(cExp.amountCents)}
+                                        </strong>
+                                        <span
+                                          className={`entry-status ${cExp.status === "paid" ? "settled" : "pending"} expense`}
+                                          style={{ cursor: "default" }}
+                                          title={cExp.status === "paid" ? "Fatura paga" : "Fatura aberta"}
+                                        >
+                                          {cExp.status === "paid" ? "Paga" : "Aberta"}
+                                        </span>
                                       </div>
                                     </div>
                                   ))}
@@ -976,16 +1174,43 @@ export default function Home() {
                       <p className="eyebrow">MOVIMENTAÇÃO</p>
                       <h3>Todos os lançamentos</h3>
                     </div>
-                    <button onClick={() => setTab("Visão geral")}>
-                      Ver resumo →
-                    </button>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                      <div className="purchase-sort" aria-label="Ordenar lançamentos">
+                        {(["date", "value"] as const).map((field) => {
+                          const active = transactionSort.field === field;
+                          return (
+                            <button
+                              key={field}
+                              className={active ? "active" : ""}
+                              onClick={() => toggleTransactionSort(field)}
+                              aria-pressed={active}
+                              aria-label={`Ordenar por ${field === "date" ? "data" : "valor"}`}
+                              title={`Ordenar por ${field === "date" ? "data" : "valor"} (${active ? (transactionSort.direction === "desc" ? "decrescente, clique para crescente" : "crescente, clique para decrescente") : "clique para ordenar"})`}
+                            >
+                              <span aria-hidden="true">
+                                {field === "date" ? "▣" : "R$"}
+                              </span>
+                              {field === "date" ? "Data" : "Valor"}
+                              {active && (
+                                <b aria-hidden="true">
+                                  {transactionSort.direction === "desc" ? "↓" : "↑"}
+                                </b>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <button onClick={() => setTab("Visão geral")}>
+                        Ver resumo →
+                      </button>
+                    </div>
                   </div>
                   <div className="transactions finance-transactions">
                     {loading ? (
                       <div className="empty-state">
                         Carregando seus lançamentos…
                       </div>
-                    ) : entries.length === 0 ? (
+                    ) : sortedEntries.length === 0 ? (
                       <div className="empty-state">
                         <strong>Seu financeiro começa aqui.</strong>
                         <span>
@@ -997,7 +1222,7 @@ export default function Home() {
                         </button>
                       </div>
                     ) : (
-                      entries.map((entry) => (
+                      sortedEntries.map((entry) => (
                         <div
                           className={`transaction ${entry.kind}`}
                           key={entry.id}
