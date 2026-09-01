@@ -6,6 +6,18 @@ const addMonths = (month: string, count: number) => {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 };
 
+export const getInvoiceMonth = (
+  purchaseDate: string,
+  closingDay: number,
+  dueDay: number,
+) => {
+  const purchaseMonth = purchaseDate.slice(0, 7);
+  const day = Number(purchaseDate.slice(8, 10));
+  const afterClosing = day > closingDay ? 1 : 0;
+  const dueNextMonth = dueDay <= closingDay ? 1 : 0;
+  return addMonths(purchaseMonth, afterClosing + dueNextMonth);
+};
+
 export async function createCardPurchase(input: {
   cardName: string;
   description: string;
@@ -47,9 +59,10 @@ export async function createCardPurchase(input: {
     .single();
   if (error) throw error;
 
-  const firstMonth = addMonths(
-    input.purchaseDate.slice(0, 7),
-    Number(input.purchaseDate.slice(8, 10)) > card.closing_day ? 1 : 0,
+  const firstMonth = getInvoiceMonth(
+    input.purchaseDate,
+    card.closing_day,
+    card.due_day,
   );
   const base = Math.trunc(input.totalCents / input.installmentCount);
   const remainder = input.totalCents - base * input.installmentCount;
@@ -125,9 +138,10 @@ export async function createCardPurchases(input: {
 
   const installments = (createdPurchases ?? []).flatMap((created, index) => {
     const purchase = values[index];
-    const firstMonth = addMonths(
-      purchase.purchase_date.slice(0, 7),
-      Number(purchase.purchase_date.slice(8, 10)) > card.closing_day ? 1 : 0,
+    const firstMonth = getInvoiceMonth(
+      purchase.purchase_date,
+      card.closing_day,
+      card.due_day,
     );
     const base = Math.trunc(purchase.total_cents / purchase.installment_count);
     const remainder = purchase.total_cents - base * purchase.installment_count;

@@ -4,8 +4,91 @@ const addMonths = (month: string, count: number) => {
     d = new Date(Date.UTC(y, m - 1 + count, 1));
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 };
-const firstMonth = (date: string, closing: number) =>
-  addMonths(date.slice(0, 7), Number(date.slice(8, 10)) > closing ? 1 : 0);
+const firstMonth = (date: string, closing: number, due: number) => {
+  const purchaseMonth = date.slice(0, 7);
+  const day = Number(date.slice(8, 10));
+  const afterClosing = day > closing ? 1 : 0;
+  const dueNextMonth = due <= closing ? 1 : 0;
+  return addMonths(purchaseMonth, afterClosing + dueNextMonth);
+};
+
+async function reconcilePendingInstallments(
+  db: ReturnType<typeof getSupabase>,
+) {
+  try {
+    const [{ data: cards }, { data: purchases }, { data: installments }] =
+      await Promise.all([
+        db
+          .from("credit_cards")
+          .select("id,closing_day,due_day")
+          .is("deleted_at", null),
+        db
+          .from("card_purchases")
+          .select("id,card_id,purchase_date")
+          .is("deleted_at", null),
+        db
+          .from("card_installments")
+          .select(
+            "id,purchase_id,card_id,installment_number,invoice_month,status",
+          )
+          .eq("status", "pending"),
+      ]);
+    if (!cards || !purchases || !installments) return;
+    const cardMap = new Map(cards.map((c) => [c.id, c]));
+    const purchaseMap = new Map(purchases.map((p) => [p.id, p]));
+
+    const updates: PromiseLike<any>[] = [];
+    const newInvoiceRows: { card_id: number; reference_month: string }[] = [];
+    const affectedCardMonths = new Set<string>();
+
+    for (const inst of installments) {
+      const purchase = purchaseMap.get(inst.purchase_id);
+      const card = cardMap.get(inst.card_id);
+      if (!purchase || !card) continue;
+
+      const expectedFirst = firstMonth(
+        purchase.purchase_date,
+        card.closing_day,
+        card.due_day,
+      );
+      const expectedMonth = addMonths(
+        expectedFirst,
+        inst.installment_number - 1,
+      );
+
+      if (inst.invoice_month !== expectedMonth) {
+        affectedCardMonths.add(`${inst.card_id}:${inst.invoice_month}`);
+        affectedCardMonths.add(`${inst.card_id}:${expectedMonth}`);
+        newInvoiceRows.push({
+          card_id: inst.card_id,
+          reference_month: expectedMonth,
+        });
+        updates.push(
+          db
+            .from("card_installments")
+            .update({ invoice_month: expectedMonth })
+            .eq("id", inst.id),
+        );
+      }
+    }
+
+    if (updates.length > 0) {
+      if (newInvoiceRows.length > 0) {
+        await db.from("card_invoices").upsert(newInvoiceRows, {
+          onConflict: "card_id,reference_month",
+          ignoreDuplicates: true,
+        });
+      }
+      await Promise.all(updates);
+      for (const item of affectedCardMonths) {
+        const [cId, refM] = item.split(":");
+        await reconcileInvoiceMonth(db, Number(cId), refM);
+      }
+    }
+  } catch (err) {
+    console.error("Failed to reconcile pending installments", err);
+  }
+}
 async function reconcileInvoiceMonth(
   db: ReturnType<typeof getSupabase>,
   cardId: number,
@@ -123,8 +206,9 @@ type InvoiceRow = {
 
 export async function GET() {
   try {
-    const db = getSupabase(),
-      [ca, pu, ins, inv] = await Promise.all([
+    const db = getSupabase();
+    await reconcilePendingInstallments(db);
+    const [ca, pu, ins, inv] = await Promise.all([
         db.from("credit_cards").select("*").is("deleted_at", null),
         db.from("card_purchases").select("*").is("deleted_at", null),
         db.from("card_installments").select("*"),
@@ -295,7 +379,7 @@ export async function POST(req: Request) {
       if (error) throw error;
       const base = Math.trunc(total / count),
         rem = total - base * count,
-        first = firstMonth(date, card.closing_day),
+        first = firstMonth(date, card.closing_day, card.due_day),
         values = Array.from({ length: count }, (_, i) => ({
           purchase_id: p.id,
           card_id: cardId,
@@ -392,7 +476,7 @@ export async function PATCH(req: Request) {
             .single(),
           db
             .from("credit_cards")
-            .select("id,closing_day")
+            .select("id,closing_day,due_day")
             .eq("id", cardId)
             .is("deleted_at", null)
             .single(),
@@ -433,7 +517,11 @@ export async function PATCH(req: Request) {
         ),
         base = Math.trunc(total / count),
         remainder = total - base * count,
-        first = firstMonth(date, cardResult.data.closing_day),
+        first = firstMonth(
+          date,
+          cardResult.data.closing_day,
+          cardResult.data.due_day,
+        ),
         now = new Date().toISOString(),
         values = Array.from({ length: count }, (_, index) => {
           const number = index + 1,
