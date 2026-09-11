@@ -156,6 +156,53 @@ export default function CardsView({
   });
   const [card, setCard] = useState(emptyCard),
     [purchase, setPurchase] = useState(emptyPurchase);
+  const [categories, setCategories] = useState<string[]>([...TRANSACTION_CATEGORIES]);
+  const [showAddCat, setShowAddCat] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
+  const [newCatColor, setNewCatColor] = useState("#4e83c4");
+  const [creatingCat, setCreatingCat] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/categories")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.transactionCategories && Array.isArray(d.transactionCategories)) {
+          setCategories(d.transactionCategories);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  async function handleCreateNewCategory() {
+    const trimmed = newCatName.trim();
+    if (!trimmed) return;
+    setCreatingCat(true);
+    try {
+      const res = await fetch("/api/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: trimmed,
+          kind: "expense",
+          color: newCatColor,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setCategories((prev) => Array.from(new Set([...prev, trimmed])));
+        setPurchase((p) => ({ ...p, category: trimmed }));
+        setShowAddCat(false);
+        setNewCatName("");
+        onNotice("Categoria criada com sucesso!");
+      } else {
+        onNotice(data.error || "Erro ao criar categoria.");
+      }
+    } catch {
+      onNotice("Não foi possível salvar a categoria.");
+    } finally {
+      setCreatingCat(false);
+    }
+  }
 
   const sortedCards = useMemo(() => {
     return [...data.cards].sort((a, b) =>
@@ -608,16 +655,40 @@ export default function CardsView({
           </div>
           <div className="field-row">
             <label>
-              Categoria
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>Categoria</span>
+                <button
+                  type="button"
+                  onClick={() => setShowAddCat((s) => !s)}
+                  style={{
+                    border: 0,
+                    background: "none",
+                    color: "var(--green)",
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    padding: "0 2px",
+                  }}
+                >
+                  {showAddCat ? "Cancelar" : "＋ Nova"}
+                </button>
+              </div>
               <select
                 value={purchase.category}
-                onChange={(e) =>
-                  setPurchase({ ...purchase, category: e.target.value })
-                }
+                onChange={(e) => {
+                  if (e.target.value === "__new__") {
+                    setShowAddCat(true);
+                  } else {
+                    setPurchase({ ...purchase, category: e.target.value });
+                  }
+                }}
               >
-                {TRANSACTION_CATEGORIES.map((c) => (
-                  <option key={c}>{c}</option>
+                {categories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
                 ))}
+                <option value="__new__">＋ Nova categoria...</option>
               </select>
             </label>
             <label>
@@ -633,6 +704,76 @@ export default function CardsView({
               />
             </label>
           </div>
+          {showAddCat && (
+            <div
+              style={{
+                margin: "-4px 0 14px",
+                padding: "12px",
+                background: "#f7faf7",
+                border: "1px dashed #b7d4c4",
+                borderRadius: "10px",
+                display: "grid",
+                gap: "10px",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <strong style={{ fontSize: "12px", color: "var(--ink)" }}>Criar Nova Categoria</strong>
+                <button
+                  type="button"
+                  onClick={() => setShowAddCat(false)}
+                  style={{ border: 0, background: "none", color: "#8a968f", cursor: "pointer", fontSize: "14px" }}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="field-row">
+                <label style={{ margin: 0 }}>
+                  Nome da Categoria
+                  <input
+                    type="text"
+                    placeholder="Ex: Farmácia, Academia..."
+                    value={newCatName}
+                    onChange={(e) => setNewCatName(e.target.value)}
+                    autoFocus
+                  />
+                </label>
+                <label style={{ margin: 0 }}>
+                  Cor
+                  <input
+                    type="color"
+                    value={newCatColor}
+                    onChange={(e) => setNewCatColor(e.target.value)}
+                    style={{ height: "42px", padding: "2px", cursor: "pointer" }}
+                  />
+                </label>
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddCat(false)}
+                  style={{
+                    border: "1px solid var(--line)",
+                    background: "#fff",
+                    borderRadius: "8px",
+                    padding: "6px 12px",
+                    fontSize: "12px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={creatingCat || !newCatName.trim()}
+                  onClick={() => void handleCreateNewCategory()}
+                  style={{ padding: "6px 14px", fontSize: "12px" }}
+                >
+                  {creatingCat ? "Salvando…" : "Salvar categoria"}
+                </button>
+              </div>
+            </div>
+          )}
           <button
             className="primary wide"
             disabled={saving}
@@ -710,39 +851,38 @@ export default function CardsView({
             </footer>
           </article>
         </section>
-        <div className="section-title">
-          <div>
+        <div className="section-title debt-section-title">
+          <div className="debt-title-wrap">
             <p className="eyebrow">DETALHAMENTO</p>
             <h3>Parcelamentos</h3>
           </div>
-          <div className="debt-controls">
+          <div className="debt-toolbar">
             <button
               type="button"
               className={`completed-toggle ${showCompletedDebts ? "active" : ""}`}
               aria-pressed={showCompletedDebts}
               onClick={() => setShowCompletedDebts((current) => !current)}
+              title={showCompletedDebts ? "Ocultar parcelamentos quitados" : "Mostrar parcelamentos quitados"}
             >
               <i aria-hidden="true" />
-              Mostrar concluídas
+              <span>Concluídas</span>
             </button>
             <label className="debt-sort">
-              <span>Ordenar por</span>
+              <span className="debt-sort-label">Ordenar:</span>
               <select
                 value={debtSort}
                 onChange={(event) =>
                   setDebtSort(event.target.value as DebtSort)
                 }
               >
-                <option value="newest">Mais atuais</option>
+                <option value="newest">Mais recentes</option>
                 <option value="oldest">Mais antigas</option>
-                <option value="balance_desc">Saldo devedor: maior</option>
-                <option value="balance_asc">Saldo devedor: menor</option>
+                <option value="balance_desc">Saldo: maior</option>
+                <option value="balance_asc">Saldo: menor</option>
                 <option value="progress_desc">% paga: maior</option>
                 <option value="progress_asc">% paga: menor</option>
-                <option value="installment_desc">
-                  Valor da parcela: maior
-                </option>
-                <option value="installment_asc">Valor da parcela: menor</option>
+                <option value="installment_desc">Parcela: maior</option>
+                <option value="installment_asc">Parcela: menor</option>
               </select>
             </label>
           </div>

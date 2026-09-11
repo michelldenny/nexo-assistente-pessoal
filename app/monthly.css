@@ -79,21 +79,6 @@
     justify-content: space-between;
   }
 }
-@media (max-width: 560px) {
-  .top-actions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-  .month-selector {
-    justify-content: space-between;
-  }
-  .entry-status {
-    order: 5;
-  }
-  .transaction {
-    align-items: center;
-  }
-}
 .icon-action {
   width: 34px;
   height: 34px;
@@ -130,6 +115,13 @@
   line-height: 1.42;
 }
 
+.transaction-actions-cluster {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 @media (max-width: 720px) {
   .topbar {
     flex-wrap: wrap;
@@ -140,13 +132,95 @@
     justify-content: space-between;
   }
   .transaction {
-    flex-wrap: wrap;
+    min-height: auto;
+    padding: 8px 12px;
+    gap: 10px;
+    align-items: center;
+  }
+  .transaction-icon {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+    border-radius: 9px;
   }
   .transaction-copy {
-    min-width: 150px;
+    min-width: 120px;
+    gap: 2px;
+  }
+  .transaction-header-line {
+    gap: 6px;
+  }
+  .transaction-header-line strong {
+    font-size: 12.5px;
+  }
+  .transaction-copy small {
+    font-size: 10px;
+  }
+  .transaction-amount {
+    font-size: 12.5px;
+  }
+  .transaction-actions-cluster {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+  .entry-status {
+    padding: 4px 8px;
+    font-size: 8.5px;
+    border-radius: 7px;
   }
   .row-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 1;
+    margin: 0;
+    width: auto;
+  }
+  .row-actions button,
+  .icon-action {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+    border-radius: 8px;
+  }
+}
+
+@media (max-width: 560px) {
+  .top-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .month-selector {
+    justify-content: space-between;
+  }
+  .transaction {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 8px 10px;
+    gap: 6px 10px;
+    min-height: auto;
+  }
+  .transaction-amount {
     margin-left: auto;
+  }
+  .transaction-actions-cluster {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 1px;
+    padding-top: 4px;
+    border-top: 1px dashed #f0f3ee;
+  }
+  .row-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 1;
+    margin-left: 4px;
   }
 }
 

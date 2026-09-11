@@ -62,5 +62,18 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Salário: "#168565",
   "Saldo Anterior": "#607b72",
   "Vale Alimentação": "#d58b38",
-  "Vale Refeição": "#d36e49",
 };
+
+export function getCategoryColor(
+  category: string,
+  customColors?: Record<string, string>,
+): string {
+  if (customColors && customColors[category]) return customColors[category];
+  if (CATEGORY_COLORS[category]) return CATEGORY_COLORS[category];
+  let hash = 0;
+  for (let i = 0; i < category.length; i++) {
+    hash = category.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = Math.abs(hash % 360);
+  return `hsl(${hue}, 65%, 52%)`;
+}

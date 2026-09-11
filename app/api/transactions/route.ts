@@ -27,11 +27,9 @@ function validate(p: Payload) {
     category = p.category?.trim() || "";
   if (!["expense", "income"].includes(p.kind ?? ""))
     return { error: "Tipo inválido." };
-  const allowed =
-    p.kind === "income" ? INCOME_CATEGORIES : TRANSACTION_CATEGORIES;
-  if (!allowed.includes(category as never))
+  if (!category || category.length > 50)
     return {
-      error: `Categoria inválida para ${p.kind === "income" ? "receita" : "despesa"}.`,
+      error: `Informe uma categoria válida para ${p.kind === "income" ? "receita" : "despesa"}.`,
     };
   if (!description || description.length > 120)
     return { error: "Informe uma descrição de até 120 caracteres." };

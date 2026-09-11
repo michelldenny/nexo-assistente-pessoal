@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import AgendaView, { type EventDraft } from "./AgendaView";
 import {
   CATEGORY_COLORS,
+  getCategoryColor,
   INCOME_CATEGORIES,
   TRANSACTION_CATEGORIES,
 } from "./categories";
@@ -112,6 +113,79 @@ export default function Home() {
   const [importOpen, setImportOpen] = useState(false);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  const [availableExpenseCategories, setAvailableExpenseCategories] = useState<string[]>([
+    ...TRANSACTION_CATEGORIES,
+  ]);
+  const [availableIncomeCategories, setAvailableIncomeCategories] = useState<string[]>([
+    ...INCOME_CATEGORIES,
+  ]);
+  const [dynamicCategoryColors, setDynamicCategoryColors] = useState<Record<string, string>>({
+    ...CATEGORY_COLORS,
+  });
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
+  const [newCatKind, setNewCatKind] = useState<"expense" | "income">("expense");
+  const [newCatColor, setNewCatColor] = useState("#4e83c4");
+  const [creatingCategory, setCreatingCategory] = useState(false);
+
+  async function loadCategories() {
+    try {
+      const res = await fetch("/api/categories");
+      if (res.ok) {
+        const d = await res.json();
+        if (d.transactionCategories && Array.isArray(d.transactionCategories)) {
+          setAvailableExpenseCategories(d.transactionCategories);
+        }
+        if (d.incomeCategories && Array.isArray(d.incomeCategories)) {
+          setAvailableIncomeCategories(d.incomeCategories);
+        }
+        if (d.categoryColors) {
+          setDynamicCategoryColors(d.categoryColors);
+        }
+      }
+    } catch {}
+  }
+
+  async function handleCreateCategory() {
+    const trimmed = newCatName.trim();
+    if (!trimmed) return;
+    setCreatingCategory(true);
+    try {
+      const res = await fetch("/api/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: trimmed,
+          kind: newCatKind,
+          color: newCatColor,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        if (newCatKind === "income") {
+          setAvailableIncomeCategories((prev) => Array.from(new Set([...prev, trimmed])));
+        } else {
+          setAvailableExpenseCategories((prev) => Array.from(new Set([...prev, trimmed])));
+        }
+        setDynamicCategoryColors((prev) => ({ ...prev, [trimmed]: newCatColor }));
+        setDraft((d) => ({ ...d, category: trimmed, kind: newCatKind }));
+        setShowAddCategory(false);
+        setNewCatName("");
+        setNotice("Categoria criada com sucesso!");
+      } else {
+        setNotice(data.error || "Erro ao criar categoria.");
+      }
+    } catch {
+      setNotice("Não foi possível salvar a categoria.");
+    } finally {
+      setCreatingCategory(false);
+    }
+  }
+
   const [cardExpenses, setCardExpenses] = useState<CardExpense[]>([]);
   const [transactionSort, setTransactionSort] = useState<TransactionSort>({
     field: "date",
@@ -124,6 +198,10 @@ export default function Home() {
   const [monthlyCashflow, setMonthlyCashflow] = useState<
     Record<string, { incomeCents: number; expenseCents: number }>
   >({});
+
+  useEffect(() => {
+    void loadCategories();
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -590,8 +668,13 @@ export default function Home() {
     }
   }
 
-  function toggleListening() {
+  async function toggleListening() {
     if (isListening) {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch {}
+      }
       if (recognitionRef.current) {
         try {
           recognitionRef.current.stop();
@@ -603,6 +686,86 @@ export default function Home() {
 
     if (typeof window === "undefined") return;
 
+    // Se o navegador suportar MediaRecorder e getUserMedia
+    if (navigator.mediaDevices && typeof window.MediaRecorder !== "undefined") {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunksRef.current = [];
+
+        let mimeType = "";
+        const preferredTypes = [
+          "audio/webm;codecs=opus",
+          "audio/webm",
+          "audio/mp4",
+          "audio/ogg;codecs=opus",
+          "audio/wav",
+        ];
+        for (const t of preferredTypes) {
+          if (MediaRecorder.isTypeSupported(t)) {
+            mimeType = t;
+            break;
+          }
+        }
+
+        const recorder = mimeType
+          ? new MediaRecorder(stream, { mimeType })
+          : new MediaRecorder(stream);
+
+        recorder.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
+        };
+
+        recorder.onstop = async () => {
+          setIsListening(false);
+          stream.getTracks().forEach((track) => track.stop());
+
+          const audioBlob = new Blob(audioChunksRef.current, {
+            type: recorder.mimeType || "audio/webm",
+          });
+
+          if (audioBlob.size < 400) {
+            return;
+          }
+
+          setIsTranscribing(true);
+          try {
+            const formData = new FormData();
+            formData.append("file", audioBlob, "audio.webm");
+
+            const res = await fetch("/api/transcribe", {
+              method: "POST",
+              body: formData,
+            });
+
+            const data = await res.json();
+            if (res.ok && data.text) {
+              setMessage((prev) => {
+                const current = prev.trim();
+                return current ? `${current} ${data.text.trim()}` : data.text.trim();
+              });
+            } else if (data.error) {
+              setNotice(data.error);
+            }
+          } catch (err) {
+            console.error(err);
+            setNotice("Erro ao transcrever o áudio.");
+          } finally {
+            setIsTranscribing(false);
+          }
+        };
+
+        mediaRecorderRef.current = recorder;
+        recorder.start(250);
+        setIsListening(true);
+        return;
+      } catch (err) {
+        console.warn("MediaRecorder indisponível ou negado, tentando fallback:", err);
+      }
+    }
+
+    // Fallback: Web Speech API
     const SpeechRecognitionClass =
       (window as unknown as { SpeechRecognition?: any; webkitSpeechRecognition?: any })
         .SpeechRecognition ||
@@ -611,7 +774,7 @@ export default function Home() {
 
     if (!SpeechRecognitionClass) {
       setNotice(
-        "Reconhecimento de voz não suportado neste navegador. Experimente no Chrome, Edge ou Safari.",
+        "Reconhecimento de voz não suportado neste navegador. Permita o microfone ou use o Chrome, Safari ou Edge.",
       );
       return;
     }
@@ -622,7 +785,6 @@ export default function Home() {
       recognition.continuous = true;
       recognition.interimResults = true;
 
-      // Preserva o texto base já digitado no input
       speechBaseTextRef.current = message.trim();
 
       recognition.onstart = () => {
@@ -881,9 +1043,32 @@ export default function Home() {
                       <p className="eyebrow">DISTRIBUIÇÃO</p>
                       <h3>Gastos por categoria</h3>
                     </div>
-                    <button onClick={() => setTab("Financeiro")}>
-                      Ver lançamentos →
-                    </button>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewCatKind("expense");
+                          setShowAddCategory(true);
+                          setModalOpen(true);
+                        }}
+                        style={{
+                          border: "1px solid var(--line)",
+                          background: "#fff",
+                          padding: "6px 12px",
+                          borderRadius: "8px",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          color: "var(--green)",
+                          cursor: "pointer",
+                        }}
+                        title="Criar nova categoria"
+                      >
+                        ＋ Nova categoria
+                      </button>
+                      <button onClick={() => setTab("Financeiro")}>
+                        Ver lançamentos →
+                      </button>
+                    </div>
                   </div>
                   <div className="category-expenses-card">
                     {loading ? (
@@ -901,8 +1086,10 @@ export default function Home() {
                     ) : (
                       <div className="category-list">
                         {categoryExpenses.map((item) => {
-                          const catColor =
-                            CATEGORY_COLORS[item.category] || CATEGORY_COLORS.Outros;
+                          const catColor = getCategoryColor(
+                            item.category,
+                            dynamicCategoryColors,
+                          );
                           const isExpanded = expandedCategory === item.category;
                           return (
                             <div
@@ -1203,9 +1390,6 @@ export default function Home() {
                           );
                         })}
                       </div>
-                      <button onClick={() => setTab("Visão geral")}>
-                        Ver resumo →
-                      </button>
                     </div>
                   </div>
                   <div className="transactions finance-transactions">
@@ -1225,71 +1409,78 @@ export default function Home() {
                         </button>
                       </div>
                     ) : (
-                      sortedEntries.map((entry) => (
-                        <div
-                          className={`transaction ${entry.kind}`}
-                          key={entry.id}
-                        >
+                      sortedEntries.map((entry) => {
+                        const catColor = getCategoryColor(
+                          entry.category,
+                          dynamicCategoryColors,
+                        );
+                        return (
                           <div
-                            className={`transaction-icon ${entry.kind}`}
-                            style={{
-                              background:
-                                entry.kind === "income"
-                                  ? "#e8f7ee"
-                                  : `${CATEGORY_COLORS[entry.category] ?? CATEGORY_COLORS.Outros}18`,
-                              color:
-                                entry.kind === "income"
-                                  ? "#168565"
-                                  : (CATEGORY_COLORS[entry.category] ??
-                                    CATEGORY_COLORS.Outros),
-                            }}
+                            className={`transaction ${entry.kind}`}
+                            key={entry.id}
                           >
-                            {entry.kind === "income" ? "↓" : "↑"}
-                          </div>
-                          <div className="transaction-copy">
-                            <div className="transaction-header-line">
-                              <strong>{entry.description}</strong>
-                              <span className={`kind-pill ${entry.kind}`}>
-                                {entry.kind === "income" ? "Receita" : "Despesa"}
-                              </span>
+                            <div
+                              className={`transaction-icon ${entry.kind}`}
+                              style={{
+                                background:
+                                  entry.kind === "income"
+                                    ? "#e8f7ee"
+                                    : `${catColor}18`,
+                                color:
+                                  entry.kind === "income" ? "#168565" : catColor,
+                              }}
+                            >
+                              {entry.kind === "income" ? "↓" : "↑"}
                             </div>
-                            <small>
-                              {entry.category} · {displayDate(entry.occurredOn)}
-                              {entry.source === "assistant"
-                                ? " · via assistente"
-                                : ""}
-                            </small>
-                          </div>
-                          <strong className={`transaction-amount ${entry.kind}`}>
-                            {entry.kind === "income" ? "+ " : "− "}
-                            {money(entry.amountCents)}
-                          </strong>
-                          <button
-                            className={`entry-status ${entry.status} ${entry.kind}`}
-                            onClick={() => void toggleStatus(entry)}
-                          >
-                            {statusLabel(entry)}
-                          </button>
-                          <div className="row-actions">
-                            <button
-                              className="icon-action"
-                              onClick={() => openEdit(entry)}
-                              aria-label={`Editar ${entry.description}`}
-                              title="Editar"
+                            <div className="transaction-copy">
+                              <div className="transaction-header-line">
+                                <strong>{entry.description}</strong>
+                                <span className={`kind-pill ${entry.kind}`}>
+                                  {entry.kind === "income" ? "Receita" : "Despesa"}
+                                </span>
+                              </div>
+                              <small>
+                                {entry.category} · {displayDate(entry.occurredOn)}
+                                {entry.source === "assistant"
+                                  ? " · via assistente"
+                                  : ""}
+                              </small>
+                            </div>
+                            <strong
+                              className={`transaction-amount ${entry.kind}`}
                             >
-                              ✎
-                            </button>
-                            <button
-                              className="danger icon-action"
-                              onClick={() => setEntryToDelete(entry)}
-                              aria-label={`Excluir ${entry.description}`}
-                              title="Excluir"
-                            >
-                              🗑
-                            </button>
+                              {entry.kind === "income" ? "+ " : "− "}
+                              {money(entry.amountCents)}
+                            </strong>
+                            <div className="transaction-actions-cluster">
+                              <button
+                                className={`entry-status ${entry.status} ${entry.kind}`}
+                                onClick={() => void toggleStatus(entry)}
+                              >
+                                {statusLabel(entry)}
+                              </button>
+                              <div className="row-actions">
+                                <button
+                                  className="icon-action"
+                                  onClick={() => openEdit(entry)}
+                                  aria-label={`Editar ${entry.description}`}
+                                  title="Editar"
+                                >
+                                  ✎
+                                </button>
+                                <button
+                                  className="danger icon-action"
+                                  onClick={() => setEntryToDelete(entry)}
+                                  aria-label={`Excluir ${entry.description}`}
+                                  title="Excluir"
+                                >
+                                  🗑
+                                </button>
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 </>
@@ -1401,18 +1592,39 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    className={`mic-btn ${isListening ? "listening" : ""}`}
+                    className={`mic-btn ${isListening ? "listening" : ""} ${isTranscribing ? "transcribing" : ""}`}
                     onClick={toggleListening}
-                    aria-label={isListening ? "Parar gravação de áudio" : "Gravar mensagem por voz"}
-                    title={isListening ? "Ouvindo sua voz... Clique para parar" : "Falar mensagem por voz (áudio)"}
+                    disabled={isTranscribing}
+                    aria-label={
+                      isTranscribing
+                        ? "Transcrevendo áudio com IA..."
+                        : isListening
+                          ? "Parar gravação de áudio"
+                          : "Gravar mensagem por voz"
+                    }
+                    title={
+                      isTranscribing
+                        ? "Transcrevendo áudio com alta fidelidade..."
+                        : isListening
+                          ? "Gravando áudio... Clique para concluir"
+                          : "Falar mensagem por áudio (Whisper IA)"
+                    }
                   >
-                    {isListening ? (
+                    {isTranscribing ? (
+                      <span className="mic-spinner" style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>◌</span>
+                    ) : isListening ? (
                       <span className="mic-rec-dot" />
                     ) : (
                       <span className="mic-icon">🎙</span>
                     )}
                   </button>
-                  <span>{isListening ? "Ouvindo você..." : "Enter para enviar"}</span>
+                  <span>
+                    {isTranscribing
+                      ? "Transcrevendo fala…"
+                      : isListening
+                        ? "Gravando áudio… clique para parar"
+                        : "Enter para enviar"}
+                  </span>
                   <button
                     className="send"
                     onClick={() => void sendMessage()}
@@ -1517,21 +1729,121 @@ export default function Home() {
               </label>
             </div>
             <label>
-              Categoria
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>Categoria</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewCatKind(draft.kind);
+                    setShowAddCategory((s) => !s);
+                  }}
+                  style={{
+                    border: 0,
+                    background: "none",
+                    color: "var(--green)",
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    padding: "0 2px",
+                  }}
+                >
+                  {showAddCategory ? "Cancelar" : "＋ Nova categoria"}
+                </button>
+              </div>
               <select
                 value={draft.category}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, category: e.target.value }))
-                }
+                onChange={(e) => {
+                  if (e.target.value === "__new__") {
+                    setNewCatKind(draft.kind);
+                    setShowAddCategory(true);
+                  } else {
+                    setDraft((d) => ({ ...d, category: e.target.value }));
+                  }
+                }}
               >
                 {(draft.kind === "income"
-                  ? INCOME_CATEGORIES
-                  : TRANSACTION_CATEGORIES
+                  ? availableIncomeCategories
+                  : availableExpenseCategories
                 ).map((c) => (
-                  <option key={c}>{c}</option>
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
                 ))}
+                <option value="__new__">＋ Nova categoria...</option>
               </select>
             </label>
+            {showAddCategory && (
+              <div
+                style={{
+                  margin: "-4px 0 14px",
+                  padding: "12px",
+                  background: "#f7faf7",
+                  border: "1px dashed #b7d4c4",
+                  borderRadius: "10px",
+                  display: "grid",
+                  gap: "10px",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <strong style={{ fontSize: "12px", color: "var(--ink)" }}>
+                    Criar Nova Categoria ({draft.kind === "income" ? "Receita" : "Despesa"})
+                  </strong>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddCategory(false)}
+                    style={{ border: 0, background: "none", color: "#8a968f", cursor: "pointer", fontSize: "14px" }}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="field-row">
+                  <label style={{ margin: 0 }}>
+                    Nome
+                    <input
+                      type="text"
+                      placeholder="Ex: Farmácia, Academia..."
+                      value={newCatName}
+                      onChange={(e) => setNewCatName(e.target.value)}
+                      autoFocus
+                    />
+                  </label>
+                  <label style={{ margin: 0 }}>
+                    Cor
+                    <input
+                      type="color"
+                      value={newCatColor}
+                      onChange={(e) => setNewCatColor(e.target.value)}
+                      style={{ height: "42px", padding: "2px", cursor: "pointer" }}
+                    />
+                  </label>
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddCategory(false)}
+                    style={{
+                      border: "1px solid var(--line)",
+                      background: "#fff",
+                      borderRadius: "8px",
+                      padding: "6px 12px",
+                      fontSize: "12px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="primary"
+                    disabled={creatingCategory || !newCatName.trim()}
+                    onClick={() => void handleCreateCategory()}
+                    style={{ padding: "6px 14px", fontSize: "12px" }}
+                  >
+                    {creatingCategory ? "Salvando…" : "Salvar categoria"}
+                  </button>
+                </div>
+              </div>
+            )}
             {!editingId && (
               <div className="recurrence-box">
                 <label className="check-label">
