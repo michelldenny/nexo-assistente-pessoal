@@ -111,6 +111,7 @@ export default function Home() {
   const [insights, setInsights] = useState<string[]>([]);
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [attachmentBusy, setAttachmentBusy] = useState(false);
+  const [telegramBusy, setTelegramBusy] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
@@ -631,6 +632,33 @@ export default function Home() {
           ? `Não consegui responder: ${error.message}`
           : "Não consegui responder agora.",
       );
+    }
+  }
+
+  async function triggerTelegramReminder() {
+    if (telegramBusy) return;
+    setTelegramBusy(true);
+    setNotice("Enviando resumo para o seu Telegram...");
+    try {
+      const res = await fetch("/api/cron/reminders", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Falha ao disparar lembrete.");
+      }
+      if (data.telegramSent) {
+        setNotice("✓ Resumo do dia enviado com sucesso para o seu Telegram!");
+      } else {
+        setNotice(
+          data.telegramError ||
+            "Configure TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID no .env.local para ativar.",
+        );
+      }
+    } catch (err) {
+      setNotice(
+        err instanceof Error ? err.message : "Erro ao enviar para o Telegram.",
+      );
+    } finally {
+      setTelegramBusy(false);
     }
   }
 
@@ -1503,7 +1531,28 @@ export default function Home() {
                     <span>●</span> Pronto para ajudar
                   </small>
                 </div>
-                <button aria-label="Menu do assistente">•••</button>
+                <button
+                  onClick={triggerTelegramReminder}
+                  disabled={telegramBusy}
+                  title="Disparar resumo e lembretes de hoje para o Telegram"
+                  aria-label="Disparar resumo e lembretes de hoje para o Telegram"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    fontSize: "0.76rem",
+                    padding: "4px 9px",
+                    borderRadius: "6px",
+                    background: "rgba(56, 189, 248, 0.12)",
+                    border: "1px solid rgba(56, 189, 248, 0.35)",
+                    color: "#38bdf8",
+                    cursor: telegramBusy ? "not-allowed" : "pointer",
+                    marginLeft: "auto",
+                    fontWeight: 500,
+                  }}
+                >
+                  {telegramBusy ? "Enviando…" : "✈ Telegram"}
+                </button>
               </div>
               <div className="conversation">
                 <p className="assistant-label">NEXO · AGORA</p>
@@ -1534,6 +1583,9 @@ export default function Home() {
                   </button>
                   <button onClick={() => setMessage("Gastei 89,90 no mercado")}>
                     Registrar despesa
+                  </button>
+                  <button onClick={() => void triggerTelegramReminder()}>
+                    ✈ Enviar resumo no Telegram
                   </button>
                 </div>
               </div>

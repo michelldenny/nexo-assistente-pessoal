@@ -4,6 +4,7 @@ import {
   createCardPurchase,
   createCardPurchases,
 } from "../../../db/card-purchases";
+import { handleReminders } from "../cron/reminders/route";
 
 type Part = {
   text?: string;
@@ -226,6 +227,12 @@ const functionDeclarations = [
     description: "Consulte os próximos compromissos salvos.",
     parameters: { type: "OBJECT", properties: {} },
   },
+  {
+    name: "send_telegram_reminder",
+    description:
+      "Envie imediatamente o resumo matinal/diário de compromissos da agenda e contas a pagar para o Telegram do usuário. Use quando o usuário pedir para enviar, notificar ou disparar o resumo no Telegram.",
+    parameters: { type: "OBJECT", properties: {} },
+  },
 ];
 
 const today = () =>
@@ -272,7 +279,8 @@ DIRETRIZES DE FORMATAÇÃO E APRESENTAÇÃO DE RESPOSTAS:
 - Se o usuário pedir apenas para ler ou analisar um anexo, responda com a análise sem cadastrar nada. Só salve compras de cartão quando ele pedir explicitamente para registrar. Quando ele pedir para adicionar ou importar uma fatura/extrato inteiro, chame create_card_statement_purchases UMA ÚNICA VEZ enviando TODAS as compras. Não duplique nem invente dados.
 - Quando o usuário pedir para adicionar, agendar ou cadastrar corridas (como Fórmula 1, MotoGP), jogos esportivos, viagens, itinerários ou múltiplos compromissos na agenda:
   * Use a busca na web para consultar as datas oficiais, autódromos/locais e horários de largada (convertidos para o horário oficial de Brasília).
-  * Chame create_calendar_events UMA ÚNICA VEZ com a lista completa de todas as etapas/eventos identificados.`,
+  * Chame create_calendar_events UMA ÚNICA VEZ com a lista completa de todas as etapas/eventos identificados.
+- Se o usuário pedir para enviar o resumo de hoje, lembretes ou notificações para o seu Telegram, chame send_telegram_reminder.`,
             },
           ],
         },
@@ -565,6 +573,29 @@ export async function POST(request: Request) {
         count: validEvents.length,
         events: (data ?? []).map((row) => camel(row)),
         message: `🏁 **${validEvents.length} compromissos adicionados à sua agenda com sucesso!**\n\n${summaryList}${more}`,
+      });
+    }
+    if (call.name === "send_telegram_reminder") {
+      const reminderRes = await handleReminders(request);
+      const data = (await reminderRes.json()) as {
+        success?: boolean;
+        telegramSent?: boolean;
+        telegramError?: string | null;
+        eventsCount?: number;
+        todayExpensesCount?: number;
+        overdueExpensesCount?: number;
+      };
+      if (!reminderRes.ok || !data.telegramSent) {
+        return Response.json({
+          type: "message",
+          message:
+            data.telegramError ||
+            "Não foi possível enviar para o Telegram. Verifique se TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID estão configurados no arquivo .env.local.",
+        });
+      }
+      return Response.json({
+        type: "message",
+        message: `✈ **Resumo do dia enviado com sucesso para o seu Telegram!**\n\n• **${data.eventsCount ?? 0}** compromisso(s) na agenda\n• **${data.todayExpensesCount ?? 0}** conta(s) a pagar hoje\n• **${data.overdueExpensesCount ?? 0}** conta(s) atrasada(s)`,
       });
     }
 
