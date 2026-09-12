@@ -4,7 +4,7 @@ import {
   createCardPurchase,
   createCardPurchases,
 } from "../../../db/card-purchases";
-import { handleReminders } from "../cron/reminders/route";
+import { processReminders } from "../../../lib/reminders";
 
 type Part = {
   text?: string;
@@ -576,7 +576,7 @@ export async function POST(request: Request) {
       });
     }
     if (call.name === "send_telegram_reminder") {
-      const reminderRes = await handleReminders(request);
+      const reminderRes = await processReminders(request);
       const data = (await reminderRes.json()) as {
         success?: boolean;
         telegramSent?: boolean;
