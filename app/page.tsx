@@ -105,6 +105,7 @@ export default function Home() {
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const [agendaDraft, setAgendaDraft] = useState<EventDraft | null>(null);
+  const [agendaRefreshKey, setAgendaRefreshKey] = useState(0);
   const [month, setMonth] = useState(today().slice(0, 7));
   const [entryToDelete, setEntryToDelete] = useState<Entry | null>(null);
   const [insights, setInsights] = useState<string[]>([]);
@@ -595,8 +596,13 @@ export default function Home() {
         await loadInsights();
         setNotice(body.message || "Lançamento adicionado com sucesso.");
       }
-      if (body.type === "event_created") {
-        setNotice(body.message || "Compromisso adicionado à sua agenda.");
+      if (body.type === "event_created" || body.type === "events_created") {
+        setAgendaRefreshKey((k) => k + 1);
+        setNotice(
+          body.type === "events_created"
+            ? `${body.count} compromissos adicionados à sua agenda.`
+            : body.message || "Compromisso adicionado à sua agenda.",
+        );
       }
       if (
         body.type === "purchase_created" ||
@@ -968,6 +974,7 @@ export default function Home() {
             onDraftOpened={() => setAgendaDraft(null)}
             selectedMonth={month}
             onMonthChange={setMonth}
+            refreshKey={agendaRefreshKey}
           />
         ) : tab === "Cartões" || tab === "Dívidas" ? (
           <CardsView

@@ -57,12 +57,14 @@ export default function AgendaView({
   onDraftOpened,
   selectedMonth,
   onMonthChange,
+  refreshKey,
 }: {
   onNotice: (message: string) => void;
   pendingDraft?: EventDraft | null;
   onDraftOpened?: () => void;
   selectedMonth?: string;
   onMonthChange?: (m: string) => void;
+  refreshKey?: number;
 }) {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [month, setMonth] = useState(() => {
@@ -96,7 +98,7 @@ export default function AgendaView({
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [refreshKey]);
   useEffect(() => {
     if (!pendingDraft) return;
     setEditingId(null);

@@ -7,7 +7,10 @@ import {
 
 type Part = {
   text?: string;
+  thoughtSignature?: string;
   inlineData?: { mimeType: string; data: string };
+  toolCall?: { toolType: string; args: Record<string, unknown>; id?: string };
+  toolResponse?: Record<string, unknown>;
   functionCall?: { name: string; args: Record<string, unknown> };
   functionResponse?: { name: string; response: Record<string, unknown> };
 };
@@ -137,7 +140,7 @@ const functionDeclarations = [
   {
     name: "create_calendar_event",
     description:
-      "Cadastre imediatamente um compromisso ou evento na agenda do usuário.",
+      "Cadastre imediatamente um compromisso individual na agenda do usuário.",
     parameters: {
       type: "OBJECT",
       properties: {
@@ -164,6 +167,58 @@ const functionDeclarations = [
         "notes",
         "color",
       ],
+    },
+  },
+  {
+    name: "create_calendar_events",
+    description:
+      "Cadastre de uma só vez múltiplos compromissos ou eventos na agenda do usuário (como corridas de F1/MotoGP, jogos de futebol, calendários esportivos, viagens, itinerários ou listas de datas).",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        events: {
+          type: "ARRAY",
+          description: "Lista completa de compromissos a serem cadastrados na agenda.",
+          items: {
+            type: "OBJECT",
+            properties: {
+              title: {
+                type: "STRING",
+                description:
+                  "Título do compromisso (ex: F1 - GP de São Paulo (Interlagos) - Corrida).",
+              },
+              event_date: {
+                type: "STRING",
+                description: "Data no formato YYYY-MM-DD.",
+              },
+              start_time: {
+                type: "STRING",
+                description:
+                  "Hora no formato HH:MM (ajustado para o horário de Brasília) ou string vazia.",
+              },
+              end_time: {
+                type: "STRING",
+                description: "Hora de término HH:MM ou string vazia.",
+              },
+              location: {
+                type: "STRING",
+                description: "Local, autódromo, cidade ou circuito.",
+              },
+              notes: {
+                type: "STRING",
+                description: "Observações, etapa, detalhes ou emissora/transmissão.",
+              },
+              color: {
+                type: "STRING",
+                enum: ["green", "lime", "coral", "purple"],
+                description: "Cor da tag na agenda.",
+              },
+            },
+            required: ["title", "event_date"],
+          },
+        },
+      },
+      required: ["events"],
     },
   },
   {
@@ -214,13 +269,19 @@ DIRETRIZES DE FORMATAÇÃO E APRESENTAÇÃO DE RESPOSTAS:
   * Destaque valores em negrito (ex: **R$ 150,00**) e categorias.
 - Leia imagens, PDFs, textos e planilhas anexados, extraindo valores, datas, estabelecimentos, cartões e parcelas.
 - Sempre que o usuário perguntar sobre orçamento, finanças, gastos, quanto ganha/gasta, planejamento ou pedir cálculos com base no salário/renda (como a regra 50/30/20 ou limites de gastos), CONSULTE IMEDIATAMENTE as finanças do usuário chamando summarize_finances para obter o salário e despesas reais cadastradas, usando esses números reais na resposta sem perguntar o que já está salvo.
-- Se o usuário pedir apenas para ler ou analisar um anexo, responda com a análise sem cadastrar nada. Só salve compras de cartão quando ele pedir explicitamente para registrar. Quando ele pedir para adicionar ou importar uma fatura/extrato inteiro, chame create_card_statement_purchases UMA ÚNICA VEZ enviando TODAS as compras. Não duplique nem invente dados.`,
+- Se o usuário pedir apenas para ler ou analisar um anexo, responda com a análise sem cadastrar nada. Só salve compras de cartão quando ele pedir explicitamente para registrar. Quando ele pedir para adicionar ou importar uma fatura/extrato inteiro, chame create_card_statement_purchases UMA ÚNICA VEZ enviando TODAS as compras. Não duplique nem invente dados.
+- Quando o usuário pedir para adicionar, agendar ou cadastrar corridas (como Fórmula 1, MotoGP), jogos esportivos, viagens, itinerários ou múltiplos compromissos na agenda:
+  * Use a busca na web para consultar as datas oficiais, autódromos/locais e horários de largada (convertidos para o horário oficial de Brasília).
+  * Chame create_calendar_events UMA ÚNICA VEZ com a lista completa de todas as etapas/eventos identificados.`,
             },
           ],
         },
         contents,
-        tools: [{ functionDeclarations }],
-        toolConfig: { functionCallingConfig: { mode: "AUTO" } },
+        tools: [{ googleSearch: {} }, { functionDeclarations }],
+        toolConfig: {
+          functionCallingConfig: { mode: "AUTO" },
+          includeServerSideToolInvocations: true,
+        },
       }),
     },
   );
@@ -259,9 +320,9 @@ export async function POST(request: Request) {
       attachment?.mimeType &&
       allowed.has(attachment.mimeType),
     );
-    if ((!message?.trim() && !hasAttachment) || (message?.length ?? 0) > 600)
+    if ((!message?.trim() && !hasAttachment) || (message?.length ?? 0) > 4000)
       return Response.json(
-        { error: "Envie uma mensagem ou um arquivo válido." },
+        { error: "Envie uma mensagem ou um arquivo válido (até 4.000 caracteres)." },
         { status: 400 },
       );
     if (attachment?.data && attachment.data.length > 4_700_000)
@@ -286,7 +347,24 @@ export async function POST(request: Request) {
     const user: Content = { role: "user", parts };
     const first = await callGemini([user]);
     const model = contentOf(first);
-    const call = model?.parts?.find((part) => part.functionCall)?.functionCall;
+
+    const functionCalls = (model?.parts ?? [])
+      .map((p) => p.functionCall)
+      .filter((fc): fc is NonNullable<typeof fc> => Boolean(fc));
+
+    let call = functionCalls[0];
+    if (
+      functionCalls.length > 1 &&
+      functionCalls.every((fc) => fc.name === "create_calendar_event")
+    ) {
+      call = {
+        name: "create_calendar_events",
+        args: {
+          events: functionCalls.map((fc) => fc.args),
+        },
+      };
+    }
+
     if (!call)
       return Response.json({ type: "message", message: textOf(first) });
 
@@ -419,6 +497,74 @@ export async function POST(request: Request) {
         type: "event_created",
         event: camel(data),
         message: `Compromisso “${a.title}” adicionado à sua agenda para o dia ${day}/${month}${a.start_time ? ` às ${a.start_time}` : ""}.`,
+      });
+    }
+    if (call.name === "create_calendar_events") {
+      const a = call.args as {
+        events: Array<{
+          title: string;
+          event_date: string;
+          start_time?: string;
+          end_time?: string;
+          location?: string;
+          notes?: string;
+          color?: string;
+        }>;
+      };
+      const allowedColors = new Set(["green", "lime", "coral", "purple"]);
+      const validEvents = (Array.isArray(a.events) ? a.events : [])
+        .slice(0, 100)
+        .filter(
+          (e) =>
+            e.title?.trim() &&
+            /^\d{4}-\d{2}-\d{2}$/.test(e.event_date),
+        )
+        .map((e) => ({
+          title: e.title.trim(),
+          event_date: e.event_date,
+          start_time: e.start_time?.trim() || null,
+          end_time: e.end_time?.trim() || null,
+          location: e.location?.trim() || "",
+          notes: e.notes?.trim() || "",
+          color: e.color && allowedColors.has(e.color) ? e.color : "coral",
+          status: "scheduled",
+        }));
+
+      if (validEvents.length === 0) {
+        return Response.json({
+          type: "message",
+          message:
+            "Não consegui identificar datas ou eventos válidos para cadastrar na sua agenda.",
+        });
+      }
+
+      const db = getSupabase();
+      const { data, error } = await db
+        .from("calendar_events")
+        .insert(validEvents)
+        .select();
+      if (error) throw error;
+
+      const summaryList = validEvents
+        .slice(0, 20)
+        .map((e) => {
+          const [year, month, day] = e.event_date.split("-");
+          const time = e.start_time ? ` às ${e.start_time}` : "";
+          const loc = e.location ? ` — ${e.location}` : "";
+          return `• **${day}/${month}**${time}: **${e.title}**${loc}`;
+        })
+        .join("\n");
+
+      const more =
+        validEvents.length > 20
+          ? `\n\n... e mais ${validEvents.length - 20} eventos cadastrados.`
+          : "";
+
+      return Response.json({
+        type: "events_created",
+        count: validEvents.length,
+        events: (data ?? []).map((row) => camel(row)),
+        message: `🏁 **${validEvents.length} compromissos adicionados à sua agenda com sucesso!**\n\n${summaryList}${more}`,
       });
     }
 
